@@ -7,3 +7,4 @@ if __name__ == "__main__":
     main()
 print("CHECK NUMBER 2")
 print("tom check number 1")
+# len checkup
