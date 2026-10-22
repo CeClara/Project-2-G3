@@ -1,0 +1,28 @@
+'''Project 2: ORF finder tool 
+
+Brief
+Genomes encode genes, which in turn code for proteins. The regions that directly code for proteins are known as open reading frames or ‘ORFs’. When sequencing a new organism’s genome, it is very important to be able to find all ORFs the genome encodes, but doing so manually would require too much effort on behalf of the researcher.
+
+Your goal is to create a piece of software that can scan through a section of DNA (provided as a .txt file of single character nucleotides) and return the likely ORFs that it encodes. You may want to start with a test sequence encoding a known number of ORFs, and then move on to long sequences, and potentially whole genomes. For simplicity it is recommended to keep to bacterial sequences as these do not have introns. A .txt file of the complete E. coli genome is provided.
+
+This may not be as straight forward as it seems, as regions in between genes will encode cryptic ORFs (ORFs which are not bona fide ORFs) that do not relate to translated proteins. A second issue is that many longer ORFs may contain shorter cryptic ORFs within them (both on the forward and the reverse strand). Think about how you can address these issues to give a realistic analysis.
+
+Some ideas of output that you may wish to return to the user:
+1)	Annotated ORFs and their position within the DNA sequence
+2)	Distribution of ORF length
+3)	Usage of different codons (potential collaboration with Group 4!)
+4)	Amino acid composition
+5)	Distribution of intergenic lengths (i.e. the distance between ORFs within the genome)
+
+Taking it further
+1)	Package your script into an online app. Experiment with dash, ask your AI tool of choice to create a simple dash app (such as an online calculator), for example. Once comfortable with the architecture, try prompts that will package your script. Can this be done in a single prompt? Do you need to splice code together from different prompts?
+2)	Add functionality to allow the user to request ORFs in a specific frame, specific strand (top or bottom strand of DNA) and falling within a certain length.
+3)	Use your script to extract the promoter and terminator regions (i.e. the DNA sequence just upstream and downstream of each ORF). Can you extract any common sequence elements from these?
+
+Examples of pre-existing online apps
+•	https://www.bioinformatics.org/sms2/orf_find.html
+•	https://web.expasy.org/translate/
+•	I can’t find any good examples of tools for extracting statistics on extracted ORFs – something new for you to introduce to the community!
+
+
+'''
