@@ -1,0 +1,115 @@
+GENETIC_CODE = {
+'ATA':'I', 'ATC':'I', 'ATT':'I', 'ATG':'M',
+'ACA':'T', 'ACC':'T', 'ACG':'T', 'ACT':'T',
+'AAC':'N', 'AAT':'N', 'AAA':'K', 'AAG':'K',
+'AGC':'S', 'AGT':'S', 'AGA':'R', 'AGG':'R',
+'CTA':'L', 'CTC':'L', 'CTG':'L', 'CTT':'L',
+'CCA':'P', 'CCC':'P', 'CCG':'P', 'CCT':'P',
+'CAC':'H', 'CAT':'H', 'CAA':'Q', 'CAG':'Q',
+'CGA':'R', 'CGC':'R', 'CGG':'R', 'CGT':'R',
+'GTA':'V', 'GTC':'V', 'GTG':'V', 'GTT':'V',
+'GCA':'A', 'GCC':'A', 'GCG':'A', 'GCT':'A',
+'GAC':'D', 'GAT':'D', 'GAA':'E', 'GAG':'E',
+'GGA':'G', 'GGC':'G', 'GGG':'G', 'GGT':'G',
+'TCA':'S', 'TCC':'S', 'TCG':'S', 'TCT':'S',
+'TTC':'F', 'TTT':'F', 'TTA':'L', 'TTG':'L',
+'TAC':'Y', 'TAT':'Y', 'TAA':'*', 'TAG':'*',
+'TGC':'C', 'TGT':'C', 'TGA':'*', 'TGG':'W'
+}
+START_CODONS={'ATG'}
+STOP_CODONS={'TAA','TAG','TGA'}
+
+def validateSeq(dnaseq):
+    seq = ''.join(dnaseq.split()).upper()
+    if not seq or any(base not in 'ACGT' for base in seq):
+        return False
+    return seq
+
+def reverse_complement(seq):
+    return seq.translate(str.maketrans('ACGT', 'TGCA'))[::-1]
+
+def translate_dna(seq):
+    return ''.join(GENETIC_CODE[seq[i:i+3]] for i in range(0,len(seq)-2,3))
+
+def find_orfs_in_frame(sequence, frame, strand='+', min_length=90, include_partial=True, include_nested=True):
+    if frame not in (0,1,2):
+        raise ValueError('frame must be 0, 1, or 2')
+    if strand not in ('+','-'):
+        raise ValueError('strand must be + or -')
+    orfs=[]
+    active_starts=[]
+    segment_start=frame
+    usable_end=frame+3*((len(sequence)-frame)//3) if len(sequence)>=frame else frame
+    def add(start, end, kind):
+        if end-start < min_length or end<=start:
+            return
+        dna=sequence[start:end]
+        translated=translate_dna(dna)
+        protein=translated[:-1] if kind in ('Complete','Partial (Missing Start)') and translated.endswith('*') else translated
+        if strand=='+':
+            genome_start, genome_end=start+1,end
+        else:
+            genome_start,genome_end=len(sequence)-end+1,len(sequence)-start
+        orfs.append({'strand':strand,'frame':f'{strand}{frame+1}','start_pos':genome_start,'end_pos':genome_end,'length':end-start,'type':kind,'DNA':dna,'amino_acids':protein})
+    for pos in range(frame,usable_end,3):
+        codon=sequence[pos:pos+3]
+        if codon in START_CODONS:
+            if include_nested or not active_starts:
+                active_starts.append(pos)
+        if codon in STOP_CODONS:
+            if active_starts:
+                for start in active_starts:
+                    add(start,pos+3,'Complete')
+            elif include_partial and segment_start<pos:
+                add(segment_start,pos+3,'Partial (Missing Start)')
+            active_starts=[]
+            segment_start=pos+3
+    if active_starts:
+        if include_partial:
+            for start in active_starts:
+                add(start,usable_end,'Partial (Missing Stop)')
+    elif include_partial and segment_start<usable_end:
+        add(segment_start,usable_end,'Partial (Missing Both)')
+    return orfs
+
+def find_all_orfs(dna, min_length=90, include_partial=True, include_nested=True):
+    results=[]
+    for strand,sequence in [('+',dna),('-',reverse_complement(dna))]:
+        for frame in range(3):
+            results.extend(find_orfs_in_frame(sequence,frame,strand,min_length,include_partial,include_nested))
+    return results
+
+def main():
+    print("ORF Finder - Six reading frames")
+    choice = input("Enter 1 for DNA text, or 2 for a .txt file: ").strip()
+    if choice == '2':
+        filename = input("File path: ").strip().strip('"')
+        try:
+            with open(filename, 'r', encoding='utf-8') as handle:
+                raw_dna = handle.read()
+        except OSError as error:
+            print("Could not read file:", error)
+            return
+    else:
+        raw_dna = input("Enter DNA (spaces are OK): ")
+    dna = validateSeq(raw_dna)
+    if dna is False:
+        print("Invalid DNA. Enter A, C, G and T only (spaces and newlines allowed).")
+        return
+    try:
+        minimum = int(input("Minimum ORF length in base pairs [90]: ") or '90')
+        if minimum < 3:
+            raise ValueError
+    except ValueError:
+        print("Please enter a whole number of at least 3.")
+        return
+    results = find_all_orfs(dna, min_length=minimum)
+    print(f"\nDNA length: {len(dna)} bp | ORFs found: {len(results)}")
+    for orf in results:
+        print(f"\n{orf['frame']} | {orf['type']} | "
+              f"positions {orf['start_pos']}-{orf['end_pos']} | {orf['length']} bp")
+        print("DNA:", orf['DNA'])
+        print("Amino acids:", orf['amino_acids'])
+
+if __name__ == '__main__':
+    main()
