@@ -42,8 +42,8 @@ On edit make this a atual check by putting a x in the brackets when completed
 - [ ] Input DNA sequence from a `.txt` file
 - [ ] Clean DNA sequence (convert to uppercase and remove whitespace)
 - [ ] Validate DNA sequence (check for valid nucleotides: A, T, C, G)
-- [ ] Check whether start and stop codons are present
-- [ ] Detect partial ORFs (missing start and/or stop codons)
+- [ ] Check whether start and stop codons are present (tom)
+- [ ] Detect partial ORFs (missing start and/or stop codons) (tom)
 - [ ] Read the DNA sequence three nucleotides at a time (codons)
 - [ ] Generate the reverse-complement DNA strand in the 5′→3′ direction
 - [ ] Identify ORFs in all six reading frames
