@@ -54,6 +54,7 @@
 # - Identify start codons and stop codons.
 # - Record candidate ORFs and their coordinates.
 # - Store details such as strand, frame and length.
+
 #
 # ============================================================
 # SECTION 5: SEARCH ALL SIX READING FRAMES
@@ -74,6 +75,7 @@
 # - Allow filtering by strand.
 # - Allow filtering by reading frame.
 # - Return the filtered ORFs.
+# - Identify amino acids and there codons to potiential ORF
 #
 # ============================================================
 # SECTION 7: CALCULATE STATISTICS
