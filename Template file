@@ -23,7 +23,7 @@
 # - Agree on the format used to store each ORF.
 #
 # ============================================================
-# SECTION 2: DNA INPUT AND VALIDATION
+# SECTION 2: DNA INPUT AND VALIDATION    -----> Clara 
 # ============================================================
 #
 # Function: load_dna()
