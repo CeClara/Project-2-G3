@@ -21,7 +21,7 @@ Comparison of 12 tools
 | 12. [ORFFinder Python](https://github.com/Chokyotager/ORFFinder) | ORF coordinates, nested filtering, GFF3 exports | [Public Python source](https://github.com/Chokyotager/ORFFinder) | Intermediate; uses Biopython in examples |
 ### Best websites 
 
-## [Paper about this topic] (https://pmc.ncbi.nlm.nih.gov/articles/PMC165480/)
+## [Paper about this topic](https://pmc.ncbi.nlm.nih.gov/articles/PMC165480/)
 
 
 
