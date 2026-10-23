@@ -11,32 +11,41 @@
 
 # dnaseq= imported from user 
 
+
+#  DNA nucleotides
 Nucleotides = ['A', 'C', 'G', 'T']
 
-#Validate DNA sequence strip white and upper 
 
+# Function to clean seq
 def validateSeq(dnaseq):
     clean_seq = "".join(dnaseq.split())
     tempseq = clean_seq.upper()
+    # Reject empty sequences
+    if not tempseq:
+        return False
 
     for base in tempseq:
-    
+
         if base not in Nucleotides:
             return False
     return tempseq
 
-    while True:
+
+# Keep asking until the user enters valid DNA
+while True:
+
     user_input = input("Enter your DNA sequence (spaces allowed): ")
-    
-    # Run your function
+
+    # Run the validation function
     result = validateSeq(user_input)
-    
+
     if result is False:
-        print(" Invalid input! Only DNA Nucleotides (A, T, G, C) and spaces are allowed. Please Try again.")
+        print("Invalid input! Only A, T, G and C are allowed.")
         print("-" * 60)
         continue
-    
+
     final_seq = result
     break
 
-print(f"\nConfiguring. Your validated sequence is: {final_seq}")
+
+print(f"\nYour validated sequence is: {final_seq}")
