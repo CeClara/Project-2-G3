@@ -1,0 +1,42 @@
+'''Function: load_dna()
+# - Read a DNA sequence from a file.
+# - Remove unnecessary whitespace and convert to uppercase.
+# - Return the cleaned DNA sequence.
+#
+# Function: validate_dna()
+# - Check that the DNA sequence contains valid DNA characters.
+# - Decide how to handle unknown bases such as N.
+# - Return whether the sequence is valid.
+#''
+
+# dnaseq= imported from user 
+
+Nucleotides = ['A', 'C', 'G', 'T']
+
+#Validate DNA sequence strip white and upper 
+
+def validateSeq(dnaseq):
+    clean_seq = "".join(dnaseq.split())
+    tempseq = clean_seq.upper()
+
+    for base in tempseq:
+    
+        if base not in Nucleotides:
+            return False
+    return tempseq
+
+    while True:
+    user_input = input("Enter your DNA sequence (spaces allowed): ")
+    
+    # Run your function
+    result = validateSeq(user_input)
+    
+    if result is False:
+        print(" Invalid input! Only DNA Nucleotides (A, T, G, C) and spaces are allowed. Please Try again.")
+        print("-" * 60)
+        continue
+    
+    final_seq = result
+    break
+
+print(f"\nConfiguring. Your validated sequence is: {final_seq}")
