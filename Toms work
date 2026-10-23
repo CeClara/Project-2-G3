@@ -1,0 +1,132 @@
+def find_orfs_in_frame(sequence, frame, strand='+', start_codons=None, stop_codons=None):
+    """
+    Scans a DNA sequence in a single reading frame to identify complete and partial ORFs.
+    """
+    if start_codons is None:
+        start_codons = ['ATG']
+    if stop_codons is None:
+        stop_codons = ['TAA', 'TAG', 'TGA']
+        
+    sequence = sequence.upper()
+    orfs = []
+    
+    triplets = []
+    for i in range(frame, len(sequence) - 2, 3):
+        triplets.append((sequence[i:i+3], i))
+        
+    current_start_idx = None
+    has_valid_start = False
+    potential_missing_start_idx = frame
+    
+    idx = 0
+    while idx < len(triplets):
+        codon, pos = triplets[idx]
+        
+        if not has_valid_start:
+            if codon in start_codons:
+                current_start_idx = pos
+                has_valid_start = True
+            elif codon in stop_codons:
+                orf_len = pos + 3 - potential_missing_start_idx
+                orfs.append({
+                    'strand': strand,
+                    'frame': frame + 1,  
+                    'start_pos': potential_missing_start_idx,
+                    'end_pos': pos + 3,
+                    'length': orf_len,
+                    'type': 'Partial (Missing Start)'
+                })
+                potential_missing_start_idx = pos + 3
+                
+        else:
+            if codon in stop_codons:
+                orf_len = pos + 3 - current_start_idx
+                orfs.append({
+                    'strand': strand,
+                    'frame': frame + 1,
+                    'start_pos': current_start_idx,
+                    'end_pos': pos + 3,
+                    'length': orf_len,
+                    'type': 'Complete'
+                })
+                has_valid_start = False
+                current_start_idx = None
+                potential_missing_start_idx = pos + 3
+                
+        idx += 1
+
+    last_processed_pos = triplets[-1][1] + 3 if triplets else frame
+    
+    if has_valid_start:
+        orf_len = last_processed_pos - current_start_idx
+        orfs.append({
+            'strand': strand,
+            'frame': frame + 1,
+            'start_pos': current_start_idx,
+            'end_pos': last_processed_pos,
+            'length': orf_len,
+            'type': 'Partial (Missing Stop)'
+        })
+    elif potential_missing_start_idx < last_processed_pos:
+        orf_len = last_processed_pos - potential_missing_start_idx
+        orfs.append({
+            'strand': strand,
+            'frame': frame + 1,
+            'start_pos': potential_missing_start_idx,
+            'end_pos': last_processed_pos,
+            'length': orf_len,
+            'type': 'Partial (Missing Both)'
+        })
+
+    return orfs
+
+
+def get_reverse_complement(sequence):
+    """
+    Calculates the reverse complement of a DNA sequence.
+    """
+    complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N'}
+    reversed_seq = sequence[::-1].upper()
+    complement_seq = [complement.get(base, base) for base in reversed_seq]
+    return "".join(complement_seq)
+
+
+if __name__ == "__main__":
+    my_dna = """AAGGTGCTGTTCGGATTCTATCGTGTTTCCCTATTAACCTTAGCAATACGTAACTGAACGAAGTACGATAACATAACCATTACGTATTGCTAAGGTTAACGTCAACTGACAGTGGTTCGTACTCAGCACCTGCCGCCGCATGCTACCGCAGTGTCACTGCGACCAAGCTGGTCAGCCGATGCGCAGGACGCGACTATGCGCCATTGCCAAGAGCGGCATCAGCCCGAGTCGATACGCCTGCTGGCCAGTGCGCGCTCTGCCGGCCATATGAGTGCAGCTGGCCGACCTGGCTGCGTCGACCCTGGATGCACGGTCGGCACTCCAGCAGACGCAGTTGGCAGCTCGCTGCGAATCGCTGCGACACACGCCGCTGGCGCATCACCGAGGCGTCTGCATCCTGCCAGGCGACCGATGCCGCAGGCTGTCAGACAGCTACGGCATCCCGGCATCTGTCGAGGCGGTTGACGACCCTGCGCACTGAGCCAGATCGTCTGCTGCCATCTGCAACGCTGCCGAGTCCGCTGGCAGCCCGTGCAGCGTCCAGCACCTGGCCACGGCGACTCTGACTGCGCAGTTCAGCTGGGTACGATGTCGCTAGCGCCAGCTCGGTGCGCCATGCTGAGGCCGTCATGACGCTGCAGCTCCCGATGAGGCTGGATGACATGCGCCCGCATGTCAGCCGTGGATGCCAGCTCGCACCAATGCGCCGCCAGCAGTCGCATGCATCGACGGACAGGTGCGAGCATGCATCGGTGCTGCTGCGTAGTCGAGCATGATCGCTGAGCAGCTGGCTGACCACTTGTCAGCAGCAGCCAGCCGATGCTGTCAGCGTCATGTGCCGCCATGAGCAGATCTCGGCTGCGACTCGGAATAGACGCCGATCGGCGCATGGCGCCAGCTGGTTCGCGCTGCATCGAACCGGCTGATCGAGTGATCGCAGGCTACTAGCGGCGAGCCTGATCTGCAGCTGAACATGGTGCTGACTCGGCGCGAGGTGCTGAGTACGAACCACTGTCAGTTGACGTTAACCTTAGCAATACGTAACTGAACGAAGTAAGTAACATAACATTACCGTATTGCTAAGGTTAAAAGGTTACACAAACCCTGGACAAGCAGCACCTATGCGGTTGGCGCAAACTGGTTAGGTGGGGCGAATATCATCTCCGGGATTATTATTGGCCTGGTGGTGGCAGAAATGTTTACCTTTATTGTTCATCGTAACTGGGTCATTAAGTTACCTGATAGCGTTCCGACATCGGTTTCGCGCTCTTTCTCAGCATTAATTCCTGGTTTTATTATTCTTTCCGTGATGGGGATTATTGCCTGGGCGTTGAATACCTGGGGCACCAACTTCCATCAGATCATTATGGATACGATCTCAACCCCACTGGCATCGTTGGGTAGCGTGGTAGGCTGGGCCTATGTGATCTTTGTTCCACTGCTCTGGTTCTTCGGTATTCATGGCGCGCTGGCGCTGACCGCACTGGACAACGGCATTATGACGCCTTGGGCGCTGGAAAATATCGCGACCTATCAGCAATATGGTTCCGTCGAAGCGGCGCTGGCAGCCGGTAAGACCTTCCATATCTGGGCCAAGCCGATGCTGGACTCCTTTATTTTCCTTGGTGGCAGTGGTGCGACTTTAGGCCTGATCCTGGCTATCTTTATCGCCTCTCGACGTGCTGATTATCGTCAGGTGGCAAAACTGGCGCTGCCGTCTGGCATCTTCCAGATTAACGAACCGATTCTGTTTGGTCTGCCAATTATCATGAACCCGGTGATGTTTATCCCGTTTGTACTGGTACAACCGATTCTGGCGGCAATCACCCTGGCAGCGTACTACATGGGCATTATTCCACCGGTGACCAATATTGCACCGTGGACCATGCCAACCGGTCTGGGAGCCTTCTTTAACACCAACGGTAGCGTCGCCGCATTGCTGGTCGCACTCTTCAACCTTGGTATCGCAACGTTAATTTATCTGCCCTTTGTTGTGGTCGCTAACAAAGCACAAAACGCGATTGATAAAGAAGAGAGCGAAGAAGATATCGCTAACGCCCTGAAATTTTAATCGATGCCGGTACGGGTAATCGTGCCGGTAAGAATAGAGAGGAACGATGTATGATGGATCTCGATAATATTCCCGATACGCAAACGGAAGCTGAAGAGCTGGAAGAAGTGGTGATGGGGCTTATCATCAACTCCGGACAAGCGCGTAGCCTGGCGTATGCGGCACTGAAACAGGCGAAGCAGGGCGATTTTGCCGCAGCAAAAGCGATGATGGATCAGTCACGGATGGCATTGAATGAAGCGCATCTGGTACAGACGAAACTGATTGAAGGCGATGCTGGCGAAGGTAAGATGAAAGTGAGTCTGGTGCTGGTCCACGCTCAGGATCATTTAATGACGTCCATGCTTGCGCGTGAACTGATTACTGAATTAATTGAGCTTCATGAAAAACTGAAGGCATAAGGAGTCGATGATGCAGCCAGTGATTAACGCGCCGGAAATTGCCACTGCCCGAGAACAGCAGTTGTTTAATGGCAAAAACTTCCATGTGTTTATCTATAATAAAACTGAGAGTATCAGCGGACTGCATCAGCACGACTATTATGAATTTACTCTGGTATTAACCGGGCGTTATTTCCAGGAGATTAACGGTAAGCGCGTGTTACTGGAACGGGGCGATTTTGTTTTTATTCCGTTAGGTTCGCACCATCAAAGTTTTTATGAGTTTGGTGCCACGCGTATATTGAACGTTGGGATCAGTAAACGCTTTTTTGAGCAGCATTACCTGCCGTTGTTGCCTTATTGCTTTGTAGCTTCGCAGGTATACCGGACCAATAACGCTTTTCTCACCTATGTGGAAACAGTGATTTCTTCATTGAATTTCCGCGAAACAGGGCTGGAAGAGTTTGTTGAGATGGTTACTTTTTATGTCATTAACCGTTTACGTCATTACCGCGAAGAACAGGTGATTGATGATATACCGCAGTGGCTGAAAAGTACGGTAGAAAAAATGCATGATAAAGAGCAGTTTAGTGAATCGGCGCTGGAGAATATGGTGACGTTGTCAGCCAAATCACAGGAATATTTGACGCGAGCGACTCAACGATATTATGGTAAAACGCCAATGCAGATTATTAATGAAATCCGTATTAATTTTGCCAAAAAACAACTGGAAATGACCAACTATTCAGTGACGGATATTGCGTTTGAGGCCGGTTATAGTAGCCCGAGCTTGTTTATTAAAACGTTTAAGAAATTAACGTCCTTTACGCCTAAGAGCTATCGTAAGAAATTGACTGAATTTAATCAGTAAGTCGTTATACCTGACAATTCACATATCTGTCCTGTTGCTGGATTATTTATGTCCGGGGGCAGATATGCCAGATATCAGTATTCTGTACTGAAGGGAGAAATTATGAGCCAGAAATTAAAAGTCGTCACTATTGGTGGCGGGAGCAGCTATACCCCGGAGTTACTGGAAGGATTTATTAAGCGTTATCACGAATTGCCGGTCAGCGAATTATGGCTGGTGGATGTCGAAGGTGGTAAAGCGAAACTGGATATTATTTTTGATCTCTGCCAACGGATGATTGATAACGCTGGCGTCCCGATGAAGCTTTATAAAACGCTGGATCGCCGCGAAGCATTGAAAGATGCTGATTTCGTTACTACCCAACTGCGCGTTGGCCAATTACCGGCGCGGGAACTGGATGAACGTATTCCATTAAGTCATGGTTATCTTGGTCAGGAAACTAACGGCGCGGGCGGTCTGTTTAAAGGTCTGCGTACCATTCCGGTGATTTTTGACATCGTAAAAGATGTCGAAGAACTATGTCCGAATGCATGGGTGATTAACTTCACTAACCCGGCGGGAATGGTCACTGAAGCCGTTTATCGTCATACCGGATTTAAACGCTTTATCGGCGTGTGTAATATTCCGATCGGCATGAAGATGTTTATTCGCGATGTTCTGATGCTGAAAGACAGCGATGATTTATCTATCGATCTGTTCGGCCTCAACCATATGGTGTTCATTAAGGATGTGCTGGTAAATGGCAAATCACGCTTTGCCGAATTGCTTGATGGTGTGGCATCCGGGCAGTTAAAAGCATCTGGCGTTAAAAATATTTTCGATCTGCCATTTAGCGAAGGCTTAATTCGTTCTCTGAATCTGTTGCCGTGTTCTTATTTGCTTTATTACTTCAAGCAAAAAGAGATGCTGGCTATTGAAATGGGCGAATACTACAAAGGCGGCGCACGAGCGCAGGTCGTACAGAAAGTCGAGAAACAACTTTTTGAGCTATATAAAAACCCGGAGTTGAAAGTTAAGCCGAAAGAACTGGAACAGCGCGGTGGGGCTTATTATTCTGATGCTGCGTGCGAAGTGATCAACGCTATCTATAACGACAAAGGTGCTGCTTGTCCAGGGTTTGTGTAACCTTTTAACCTTAGCA"""
+
+    forward_dna = my_dna.replace("\n", "").replace(" ", "").upper()
+    reverse_dna = get_reverse_complement(forward_dna)
+
+    print("==================================================")
+    print("      ORF ANALYSIS (MINIMUM 30 CODONS / 90 BP)   ")
+    print("==================================================")
+
+    for frame_offset in range(3):
+        results = find_orfs_in_frame(forward_dna, frame=frame_offset, strand='+')
+        print(f"\n[+] FORWARD STRAND - READING FRAME {frame_offset + 1}:")
+        print("-" * 50)
+        
+        has_orfs = False
+        for orf in results:
+            if orf['length'] >= 90:
+                print(f"Type: {orf['type']:<25} | Coordinates: {orf['start_pos']}-{orf['end_pos']} | Length: {orf['length']} bp ({orf['length']//3} codons)")
+                has_orfs = True
+        if not has_orfs:
+            print("No significant ORFs found.")
+
+    for frame_offset in range(3):
+        results = find_orfs_in_frame(reverse_dna, frame=frame_offset, strand='-')
+        print(f"\n[-] REVERSE STRAND - READING FRAME -{frame_offset + 1}:")
+        print("-" * 50)
+        
+        has_orfs = False
+        for orf in results:
+            if orf['length'] >= 90:
+                seq_len = len(forward_dna)
+                orig_start = seq_len - orf['end_pos']
+                orig_end = seq_len - orf['start_pos']
+                
+                print(f"Type: {orf['type']:<25} | Chromosome Window: {orig_start}-{orig_end} | Length: {orf['length']} bp ({orf['length']//3} codons)")
+                has_orfs = True
+        if not has_orfs:
+            print("No significant ORFs found.")
