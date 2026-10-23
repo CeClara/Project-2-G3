@@ -1,0 +1,130 @@
+
+# ============================================================
+# PROJECT 2: ORF FINDER TOOL
+# ============================================================
+#
+# Project aim:
+# Read a DNA sequence, identify ORFs, analyse them and
+# export the results.
+#
+# Group members:
+# 1.
+# 2.
+# 3.
+# 4.
+# 5.
+#
+# ============================================================
+# SECTION 1: IMPORTS AND SHARED SETTINGS
+# ============================================================
+#
+# - Import the libraries needed for the project.
+# - Define the start codons and stop codons.
+# - Agree on the format used to store each ORF.
+#
+# ============================================================
+# SECTION 2: DNA INPUT AND VALIDATION
+# ============================================================
+#
+# Function: load_dna()
+# - Read a DNA sequence from a file.
+# - Remove unnecessary whitespace and convert to uppercase.
+# - Return the cleaned DNA sequence.
+#
+# Function: validate_dna()
+# - Check that the DNA sequence contains valid DNA characters.
+# - Decide how to handle unknown bases such as N.
+# - Return whether the sequence is valid.
+#
+# ============================================================
+# SECTION 3: REVERSE COMPLEMENT
+# ============================================================
+#
+# Function: reverse_complement()
+# - Replace each DNA base with its complementary base.
+# - Reverse the resulting sequence.
+# - Return the reverse-complement sequence.
+#
+# ============================================================
+# SECTION 4: FIND ORFs IN ONE READING FRAME
+# ============================================================
+#
+# Function: find_orfs_in_frame()
+# - Scan a DNA sequence in one reading frame.
+# - Identify start codons and stop codons.
+# - Record candidate ORFs and their coordinates.
+# - Store details such as strand, frame and length.
+#
+# ============================================================
+# SECTION 5: SEARCH ALL SIX READING FRAMES
+# ============================================================
+#
+# Function: find_orfs()
+# - Search all three reading frames on the forward strand.
+# - Search all three reading frames on the reverse strand.
+# - Combine the results into one list of ORFs.
+# - Assign each ORF a unique ID.
+#
+# ============================================================
+# SECTION 6: FILTER ORFs
+# ============================================================
+#
+# Function: filter_orfs()
+# - Filter ORFs by minimum and maximum length.
+# - Allow filtering by strand.
+# - Allow filtering by reading frame.
+# - Return the filtered ORFs.
+#
+# ============================================================
+# SECTION 7: CALCULATE STATISTICS
+# ============================================================
+#
+# Function: calculate_statistics()
+# - Calculate the total number of ORFs.
+# - Calculate the shortest, longest and average ORF lengths.
+# - Count codons and amino acids.
+# - Return the statistics in an organised format.
+#
+# ============================================================
+# SECTION 8: EXPORT RESULTS
+# ============================================================
+#
+# Function: export_results()
+# - Save ORF information to a CSV file.
+# - Include IDs, coordinates, strand, frame and length.
+# - Include the DNA sequence for each ORF.
+#
+# ============================================================
+# SECTION 9: MAIN PROGRAM
+# ============================================================
+#
+# Function: main()
+# - Load and validate the DNA sequence.
+# - Find ORFs across all six reading frames.
+# - Filter the ORFs if required.
+# - Calculate statistics.
+# - Export the results.
+# - Display a summary to the user.
+#
+# ============================================================
+# SECTION 10: TESTING
+# ============================================================
+#
+# - Test with a short DNA sequence where the expected ORFs
+#   are known.
+# - Test invalid DNA input.
+# - Test sequences with no ORFs.
+# - Test both forward and reverse strands.
+# - Check that coordinates and lengths are correct.
+#
+# ============================================================
+# SECTION 11: FUTURE IMPROVEMENTS
+# ============================================================
+#
+# - Build a Dash web app.
+# - Add interactive filters.
+# - Visualise ORF length distributions.
+# - Investigate promoters and terminators.
+# - Consider alternative bacterial start codons.
+#
+# ============================================================
