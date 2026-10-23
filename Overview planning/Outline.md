@@ -18,6 +18,7 @@ Comparison of 12 tools
 | 11. [orfipy](https://github.com/urmi-21/orfipy) | Fast sequence scanning, custom start codons, BED output | [Public Python/Cython source](https://github.com/urmi-21/orfipy) | Advanced architecture |
 | 12. [ORFFinder Python](https://github.com/Chokyotager/ORFFinder) | ORF coordinates, nested filtering, GFF3 exports | [Public Python source](https://github.com/Chokyotager/ORFFinder) | Intermediate; uses Biopython in examples |
 
+##Paper about this topic (https://pmc.ncbi.nlm.nih.gov/articles/PMC165480/)
 ###Best websites 
 
 
@@ -30,6 +31,7 @@ Comparison of 12 tools
 # What we need to include: 
 
 ## ORF Finder – Coding Checklist
+we need to decide  Choose Search Parameters we are going to do 
 
 On edit make this a atual check by putting a x in the brackets when completed 
 
@@ -42,7 +44,7 @@ On edit make this a atual check by putting a x in the brackets when completed
 - [ ] Read the DNA sequence three nucleotides at a time (codons)
 - [ ] Generate the reverse-complement DNA strand in the 5′→3′ direction
 - [ ] Identify ORFs in all six reading frames
-- [ ] Filter ORFs by length or other selection criteria
+- [ ] Filter ORFs by length or other selection criteria -> decide on selection criteria e.g. return only if >30 bases
 - [ ] Identify start and end coordinates of each ORF
 - [ ] Translate codons into amino acid sequences
 - [ ] Calculate statistics (ORF count, codon usage and ORF lengths)
