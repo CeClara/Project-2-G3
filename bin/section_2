@@ -25,16 +25,21 @@ def validate_dna(dnaseq):
 
         if base not in VALID_DNA_BASES :
             return False
-    return clean_seq
+    return tempseq
 
-# Function: load_dna()
-# - Reads a DNA sequence from an uploaded or saved text file.
-# - Validates the sequence after loading it.
-# - Returns the cleaned sequence if valid, or False if invalid.
+    while True:
+    user_input = input("Enter your DNA sequence (spaces allowed): ")
+    
+    # Run your function
+    result = validateSeq(user_input)
 
-def load_dna(file_path):
+    if result is False:
+        print("Invalid input! Only A, T, G and C are allowed.")
+        print("-" * 60)
+        continue
 
-    with open(file_path, "r", encoding="utf-8") as file:
-        dnaseq = file.read()
+    final_seq = result
+    break
 
-    return validate_dna(dnaseq)
+
+print(f"\nYour validated sequence is: {final_seq}")

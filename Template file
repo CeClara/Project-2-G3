@@ -37,14 +37,15 @@
 # - Return whether the sequence is valid.
 #
 # ============================================================
-# SECTION 3: REVERSE COMPLEMENT
+# SECTION 3: REVERSE COMPLEMENT -----> Clara
 # ============================================================
 #
 # Function: reverse_complement()
 # - Replace each DNA base with its complementary base.
 # - Reverse the resulting sequence.
 # - Return the reverse-complement sequence.
-#
+#-> CLARA idenfiying codons and there amino acids 
+
 # ============================================================
 # SECTION 4: FIND ORFs IN ONE READING FRAME
 # ============================================================
@@ -54,6 +55,7 @@
 # - Identify start codons and stop codons.
 # - Record candidate ORFs and their coordinates.
 # - Store details such as strand, frame and length.
+
 #
 # ============================================================
 # SECTION 5: SEARCH ALL SIX READING FRAMES
@@ -74,6 +76,7 @@
 # - Allow filtering by strand.
 # - Allow filtering by reading frame.
 # - Return the filtered ORFs.
+# - Identify amino acids and there codons to potiential ORF
 #
 # ============================================================
 # SECTION 7: CALCULATE STATISTICS
