@@ -43,6 +43,4 @@ def validateSeq(dnaseq):
 
     final_seq = result
     break
-
-
 print(f"\nYour validated sequence is: {final_seq}")
