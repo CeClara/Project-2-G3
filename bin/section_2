@@ -1,45 +1,39 @@
 
+# ============================================================
+# SECTION 2: DNA INPUT AND VALIDATION
+# ============================================================
+
 # Function: validate_dna()
-# - Check that the DNA sequence contains valid DNA characters.
-# - Removes whitespace and converts the sequence to uppercase.
-# - Decide how to handle unknown bases such as N.
-# - Return whether the sequence is valid.
+# - Receives a DNA sequence.
+# - Removes whitespace and converts it to uppercase.
+# - Checks that only A, T, G and C are present.
+# - Returns the cleaned sequence if valid, or False if invalid.
 
-
-# dnaseq= imported from user 
-
-
-#  DNA nucleotides
-VALID_DNA_BASES = ['A', 'C', 'G', 'T']
-
-
-# Function to clean seq
 def validate_dna(dnaseq):
-    clean_seq = "".join(dnaseq.split().upper())
+
+    # Remove whitespace and convert to uppercase
+    clean_seq = "".join(dnaseq.split()).upper()
+
     # Reject empty sequences
     if not clean_seq:
         return False
 
     # Check that every character is a valid DNA base
     for base in clean_seq:
-
-        if base not in VALID_DNA_BASES :
+        if base not in VALID_DNA_BASES:
             return False
-    return tempseq
 
-    while True:
-    user_input = input("Enter your DNA sequence (spaces allowed): ")
-    
-    # Run your function
-    result = validateSeq(user_input)
-
-    if result is False:
-        print("Invalid input! Only A, T, G and C are allowed.")
-        print("-" * 60)
-        continue
-
-    final_seq = result
-    break
+    return clean_seq
 
 
-print(f"\nYour validated sequence is: {final_seq}")
+# Function: load_dna()
+# - Reads DNA from an uploaded or saved text file.
+# - Passes the file contents to validate_dna().
+# - Returns the cleaned sequence if valid, or False if invalid.
+
+def load_dna(file_path):
+
+    with open(file_path, "r", encoding="utf-8") as file:
+        dnaseq = file.read()
+
+    return validate_dna(dnaseq)
