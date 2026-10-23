@@ -37,7 +37,7 @@
 # - Return whether the sequence is valid.
 #
 # ============================================================
-# SECTION 3: REVERSE COMPLEMENT
+# SECTION 3: REVERSE COMPLEMENT -----> Clara
 # ============================================================
 #
 # Function: reverse_complement()
