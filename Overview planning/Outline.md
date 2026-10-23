@@ -2,7 +2,7 @@
 ##Look at this on preview on github
 Comparison of 12 tools
 
-## [website on how to find off theory please read](https://vlab.amrita.edu/index.php?sub=3&brch=273&sim=1432&cnt=1)
+## [website on how to find orf theory please read](https://vlab.amrita.edu/index.php?sub=3&brch=273&sim=1432&cnt=1)
 
 
 | Tool and link | What is useful about it | Source-code access | Suitability |
