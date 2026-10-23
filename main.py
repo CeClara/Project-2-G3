@@ -10,8 +10,7 @@ print("tom check number 1")
 # len checkup
 
 
-# starting some of the raw code 
-from open reading finder on web 
+# starting some of the raw code from github repositary  from open reading finder on web 
 #Orf Finder Code
 #Four nucleotides of DNA
 
@@ -177,4 +176,4 @@ delimiter = ","
 string = s.split(delimiter)  #Converts the string into list
 #Finding the Longest ORF from the list
 print("longest ORF sequence is = ",max(string, key = len))
-print("This code is Published by Hassan Raza on Github")
+
