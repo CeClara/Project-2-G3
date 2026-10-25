@@ -1,5 +1,7 @@
 #I have edited some more sections together ( Clara DW didnt really change the code just made the varibles consistent )
 # basic stuff added but some stats or some nice formatting would be nice now GUI needed to be done
+
+#testing timmmmmeeeeee
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
 # File: config.py
