@@ -1,4 +1,4 @@
-
+# the problem was the removal of ORF detection from our main code to this fixing it now 
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
 # Run with: python -m streamlit run main.py
