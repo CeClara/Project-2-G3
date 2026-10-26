@@ -1,7 +1,7 @@
 #Features added 
-
+-> onwebiste allow people to see if it is completed partial nested 
 + graph about length in genral 
-
+longest per stop condon 
 EXAMPLE MENU 
 ORF Finder Settings
 
@@ -73,3 +73,6 @@ Minimum ORF length  ( chose )
 Start codons (custom) 
 Stop codons (custom) 
 show or not show partial orf  button 
+
+
+want to make it handle introns 
