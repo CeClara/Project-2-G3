@@ -1,6 +1,15 @@
 #Features added 
 
 6 frame mapping so you can visulally see the orfs 
+-> make each block clicable 
+DNA sequence preview
+
+ATG GCT TTT GAA ... TAA
+
+Protein translation preview
+
+MAFE...
+
 gc content 
 Coding density estimate 
 baectia start and stop 
