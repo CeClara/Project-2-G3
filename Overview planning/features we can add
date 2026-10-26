@@ -67,7 +67,7 @@ Protein translation preview
 MAFE...
 
 gc content 
-Coding density estimate 
+-> intergenic lengths -> Coding density estimate 
 baectia start and stop 
 Minimum ORF length  ( chose )
 Start codons (custom) 
@@ -75,4 +75,4 @@ Stop codons (custom)
 show or not show partial orf  button 
 
 
-want to make it handle introns 
+want to make it handle introns nope!!!!!
