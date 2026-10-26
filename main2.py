@@ -1,7 +1,6 @@
 
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
-# Core functions + Streamlit website
 # Run with: python -m streamlit run main.py
 # ============================================================
 
@@ -14,7 +13,7 @@ import streamlit as st
 
 
 # ============================================================
-# SECTION 1: SHARED SETTINGS
+# SECTION 1: SETTINGS AND GENETIC CODE
 # ============================================================
 
 START_CODONS = ["ATG"]
@@ -57,72 +56,111 @@ GENETIC_CODE = {
 # ============================================================
 
 def validate_dna(dnaseq):
-    """Return cleaned uppercase DNA if valid, otherwise False."""
+    """Clean and validate a DNA sequence."""
 
     if not isinstance(dnaseq, str):
         return False
 
-    clean_seq = "".join(dnaseq.split()).upper()
+    sequence = "".join(dnaseq.split()).upper()
 
-    if not clean_seq:
+    if not sequence:
         return False
 
-    if any(base not in VALID_DNA_BASES for base in clean_seq):
+    if any(base not in VALID_DNA_BASES for base in sequence):
         return False
 
-    return clean_seq
+    return sequence
+
+
+def parse_fasta(file_text):
+    """
+    Read plain DNA text or FASTA text.
+
+    Each FASTA record is kept separate so ORFs cannot accidentally
+    cross from one contig into another.
+    """
+
+    records = []
+    current_name = "Sequence 1"
+    current_sequence = []
+
+    lines = file_text.splitlines()
+    has_headers = any(line.strip().startswith(">") for line in lines)
+
+    if not has_headers:
+        sequence = validate_dna(file_text)
+        if sequence is False:
+            return []
+        return [(current_name, sequence)]
+
+    for line in lines:
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if line.startswith(">"):
+            if current_sequence:
+                sequence = validate_dna("".join(current_sequence))
+                if sequence is not False:
+                    records.append((current_name, sequence))
+
+            current_name = line[1:].strip() or f"Sequence {len(records) + 1}"
+            current_sequence = []
+
+        else:
+            current_sequence.append(line)
+
+    if current_sequence:
+        sequence = validate_dna("".join(current_sequence))
+        if sequence is not False:
+            records.append((current_name, sequence))
+
+    return records
 
 
 def clean_file_text(file_text):
-    """Remove FASTA headers if present, then validate the DNA."""
+    """Return a single validated sequence from plain text or FASTA."""
 
-    sequence_lines = []
+    records = parse_fasta(file_text)
 
-    for line in file_text.splitlines():
-        line = line.strip()
+    if len(records) == 1:
+        return records[0][1]
 
-        if not line or line.startswith(">"):
-            continue
-
-        sequence_lines.append(line)
-
-    return validate_dna("".join(sequence_lines))
+    return False
 
 
 def load_dna(file_path):
-    """Read a plain-text or FASTA DNA file and validate it."""
+    """Load and validate a DNA file."""
 
     try:
         with open(file_path, "r", encoding="utf-8") as file:
-            file_text = file.read()
+            return parse_fasta(file.read())
 
     except (OSError, UnicodeError) as error:
         st.error(f"Could not read the DNA file: {error}")
-        return False
-
-    return clean_file_text(file_text)
+        return []
 
 
 # ============================================================
 # SECTION 3: SEQUENCE UTILITIES
 # ============================================================
 
-def reverse_complement(seq):
-    """Return the reverse complement of a validated DNA sequence."""
+def reverse_complement(sequence):
+    """Return the reverse complement of a DNA sequence."""
 
     return "".join(
-        REVERSE_COMP_DNA[base] for base in reversed(seq)
+        REVERSE_COMP_DNA[base] for base in reversed(sequence)
     )
 
 
 def calculate_gc_content(sequence):
-    """Calculate the percentage of bases that are G or C."""
+    """Calculate the percentage of G and C bases."""
 
     if not sequence:
         return 0.0
 
     gc_count = sequence.count("G") + sequence.count("C")
-
     return (gc_count / len(sequence)) * 100
 
 
@@ -141,12 +179,12 @@ def find_orfs_in_frame(
     """
     Find complete and partial ORFs in one reading frame.
 
-    Complete ORFs have a start codon and an in-frame stop codon.
-    Partial ORFs have a start codon but no in-frame stop before
-    the end of the sequence.
+    Complete: start codon followed by an in-frame stop codon.
+    Partial: start codon without an in-frame stop before the
+    end of this sequence.
 
-    Coordinates are 1-based and inclusive.
-    Length includes the stop codon for complete ORFs.
+    Coordinates are 1-based and inclusive on the original sequence.
+    Complete ORF length includes the stop codon.
     """
 
     if start_codons is None:
@@ -163,11 +201,11 @@ def find_orfs_in_frame(
 
         codon = sequence[pos:pos + 3]
 
-        # Record a start codon.
+        # Record every start codon in this reading frame.
         if codon in start_codons:
             active_starts.append(pos)
 
-        # A stop codon closes active candidate ORFs.
+        # A stop codon completes every active start in this frame.
         if codon in stop_codons and active_starts:
 
             end_pos = pos + 2
@@ -176,7 +214,6 @@ def find_orfs_in_frame(
 
                 dna_sequence = sequence[start_pos:end_pos + 1]
 
-                # Convert coordinates to the original DNA sequence.
                 if strand == "+":
                     start_coord = start_pos + 1
                     end_coord = end_pos + 1
@@ -191,28 +228,27 @@ def find_orfs_in_frame(
                     "strand": strand,
                     "frame": frame,
                     "length": len(dna_sequence),
-                    "dna_sequence": dna_sequence,
                     "gc_content": round(
                         calculate_gc_content(dna_sequence), 2
                     ),
                     "orf_type": "Complete",
+                    "dna_sequence": dna_sequence,
                 })
 
-            # These starts have been closed by the stop codon.
+            # The stop closes all active starts before it.
             active_starts = []
 
-    # Any starts still active have no in-frame stop before
-    # the end of this sequence.
+    # Any starts still active at the end have no in-frame stop.
+    # IMPORTANT: record every remaining start, not just one.
     for start_pos in active_starts:
 
         dna_sequence = sequence[start_pos:]
-        end_pos = len(sequence) - 1
 
         if strand == "+":
             start_coord = start_pos + 1
-            end_coord = end_pos + 1
+            end_coord = genome_length
         else:
-            start_coord = genome_length - end_pos
+            start_coord = genome_length - len(sequence) + 1
             end_coord = genome_length - start_pos
 
         orfs.append({
@@ -222,11 +258,11 @@ def find_orfs_in_frame(
             "strand": strand,
             "frame": frame,
             "length": len(dna_sequence),
-            "dna_sequence": dna_sequence,
             "gc_content": round(
                 calculate_gc_content(dna_sequence), 2
             ),
             "orf_type": "Partial",
+            "dna_sequence": dna_sequence,
         })
 
     return orfs
@@ -237,7 +273,7 @@ def find_orfs_in_frame(
 # ============================================================
 
 def find_orfs(sequence, start_codons=None, stop_codons=None):
-    """Find candidate ORFs in all six reading frames."""
+    """Find candidate ORFs on both strands in all three frames."""
 
     sequence = validate_dna(sequence)
 
@@ -250,36 +286,27 @@ def find_orfs(sequence, start_codons=None, stop_codons=None):
     if stop_codons is None:
         stop_codons = STOP_CODONS
 
-    reverse_seq = reverse_complement(sequence)
+    reverse_sequence = reverse_complement(sequence)
     all_orfs = []
 
     for frame in (1, 2, 3):
 
-        # Search the forward strand.
+        # Forward strand.
         all_orfs.extend(
             find_orfs_in_frame(
-                sequence,
-                "+",
-                frame,
-                len(sequence),
-                start_codons,
-                stop_codons,
+                sequence, "+", frame, len(sequence),
+                start_codons, stop_codons
             )
         )
 
-        # Search the reverse strand.
+        # Reverse strand.
         all_orfs.extend(
             find_orfs_in_frame(
-                reverse_seq,
-                "-",
-                frame,
-                len(sequence),
-                start_codons,
-                stop_codons,
+                reverse_sequence, "-", frame, len(sequence),
+                start_codons, stop_codons
             )
         )
 
-    # Sort by original DNA coordinates.
     all_orfs.sort(
         key=lambda orf: (
             orf["start"],
@@ -289,7 +316,6 @@ def find_orfs(sequence, start_codons=None, stop_codons=None):
         )
     )
 
-    # Assign unique IDs.
     for number, orf in enumerate(all_orfs, start=1):
         orf["orf_id"] = f"ORF_{number}"
 
@@ -307,7 +333,7 @@ def filter_orfs(
     strand="both",
     frame="all",
 ):
-    """Filter detected ORFs by length, strand and reading frame."""
+    """Filter ORFs by length, strand and frame."""
 
     if strand not in ("both", "+", "-"):
         raise ValueError("strand must be 'both', '+' or '-'")
@@ -319,9 +345,7 @@ def filter_orfs(
         raise ValueError("min_length cannot be negative")
 
     if max_length is not None and max_length < min_length:
-        raise ValueError(
-            "max_length cannot be less than min_length"
-        )
+        raise ValueError("max_length cannot be less than min_length")
 
     filtered = []
 
@@ -345,14 +369,13 @@ def filter_orfs(
 
 
 # ============================================================
-# SECTION 7: CALCULATE STATISTICS
+# SECTION 7: STATISTICS
 # ============================================================
 
 def calculate_statistics(orfs):
-    """Calculate lengths, codon counts and amino acid counts."""
+    """Calculate ORF length, codon and amino-acid statistics."""
 
     lengths = [orf["length"] for orf in orfs]
-
     codon_counts = Counter()
     amino_acid_counts = Counter()
 
@@ -360,7 +383,6 @@ def calculate_statistics(orfs):
 
         dna = orf["dna_sequence"]
 
-        # Remove the stop codon only for complete ORFs.
         if orf["orf_type"] == "Complete":
             coding_sequence = dna[:-3]
         else:
@@ -377,9 +399,7 @@ def calculate_statistics(orfs):
 
     return {
         "number_of_orfs": len(orfs),
-        "mean_length": (
-            statistics.mean(lengths) if lengths else 0
-        ),
+        "mean_length": statistics.mean(lengths) if lengths else 0,
         "shortest_length": min(lengths) if lengths else 0,
         "longest_length": max(lengths) if lengths else 0,
         "codon_counts": dict(codon_counts),
@@ -388,35 +408,11 @@ def calculate_statistics(orfs):
 
 
 # ============================================================
-# SECTION 8: EXPORT RESULTS
+# SECTION 8: CSV EXPORT
 # ============================================================
 
-def export_results(orfs, file_path=DEFAULT_OUTPUT_FILE):
-    """Write ORF information to a CSV file."""
-
-    fieldnames = [
-        "orf_id",
-        "start",
-        "end",
-        "strand",
-        "frame",
-        "length",
-        "gc_content",
-        "orf_type",
-        "dna_sequence",
-    ]
-
-    with open(
-        file_path, "w", newline="", encoding="utf-8"
-    ) as file:
-
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(orfs)
-
-
 def results_to_csv(orfs):
-    """Create CSV data for the website's download button."""
+    """Convert ORF results to CSV data."""
 
     output = io.StringIO()
 
@@ -439,8 +435,15 @@ def results_to_csv(orfs):
     return output.getvalue().encode("utf-8")
 
 
+def export_results(orfs, file_path=DEFAULT_OUTPUT_FILE):
+    """Save ORF results to a CSV file."""
+
+    with open(file_path, "wb") as file:
+        file.write(results_to_csv(orfs))
+
+
 # ============================================================
-# SECTION 9: STREAMLIT WEBSITE INTERFACE
+# SECTION 9: STREAMLIT WEBSITE
 # ============================================================
 
 def main():
@@ -454,15 +457,13 @@ def main():
     st.title("🧬 ORF Finder")
 
     st.write(
-        "Find candidate open reading frames (ORFs) "
-        "in a DNA sequence."
+        "Find candidate open reading frames (ORFs) in DNA sequences."
     )
 
     st.info(
-        "Choose the start and stop codons used to detect ORFs. "
-        "Complete ORFs have an in-frame stop codon. Partial ORFs "
-        "have a start codon but no in-frame stop before the "
-        "end of the sequence."
+        "Complete ORFs have a start codon and an in-frame stop codon. "
+        "Partial ORFs have a start codon without an in-frame stop "
+        "before the end of that sequence or contig."
     )
 
     # --------------------------------------------------------
@@ -475,7 +476,6 @@ def main():
         horizontal=True,
     )
 
-    # OPTION 1: Paste or type DNA.
     if input_method == "Paste or type DNA":
 
         dna_text = st.text_area(
@@ -486,29 +486,30 @@ def main():
 
         if st.button("Find ORFs", type="primary"):
 
-            st.session_state.pop("orf_sequence", None)
+            st.session_state.pop("orf_records", None)
+
             sequence = validate_dna(dna_text)
 
             if sequence is False:
                 st.error(
-                    "Enter a non-empty DNA sequence "
-                    "containing only A, T, G and C."
+                    "Enter a non-empty DNA sequence containing "
+                    "only A, T, G and C."
                 )
             else:
-                st.session_state["orf_sequence"] = sequence
+                st.session_state["orf_records"] = [
+                    ("Sequence 1", sequence)
+                ]
 
-    # OPTION 2: Upload a DNA file.
     else:
 
         uploaded_file = st.file_uploader(
-            "Drag and drop a DNA text or FASTA file, "
-            "or browse to select one.",
+            "Upload a DNA text or FASTA file",
             type=["txt", "fasta", "fa", "fna"],
         )
 
         if st.button("Find ORFs", type="primary"):
 
-            st.session_state.pop("orf_sequence", None)
+            st.session_state.pop("orf_records", None)
 
             if uploaded_file is None:
                 st.error("Please upload a DNA file first.")
@@ -516,50 +517,59 @@ def main():
             else:
                 try:
                     file_text = uploaded_file.getvalue().decode("utf-8")
-                    sequence = clean_file_text(file_text)
+                    records = parse_fasta(file_text)
 
                 except UnicodeError:
-                    sequence = False
+                    records = []
 
-                if sequence is False:
+                if not records:
                     st.error(
-                        "The file does not contain a valid DNA sequence. "
+                        "No valid DNA sequences were found. "
                         "Use A, T, G and C. FASTA headers are supported."
                     )
                 else:
-                    st.session_state["orf_sequence"] = sequence
+                    st.session_state["orf_records"] = records
 
-    # Display results after valid input has been submitted.
-    if "orf_sequence" not in st.session_state:
+    if "orf_records" not in st.session_state:
         st.caption(
-            "Enter a sequence or upload a file, then select Find ORFs."
+            "Enter a DNA sequence or upload a file, then select Find ORFs."
         )
         return
 
-    dna_sequence = st.session_state["orf_sequence"]
+    records = st.session_state["orf_records"]
+
+    total_bases = sum(len(sequence) for _, sequence in records)
 
     st.success(
-        f"DNA sequence loaded and validated "
-        f"({len(dna_sequence):,} bases)."
+        f"Loaded {len(records)} sequence(s), containing "
+        f"{total_bases:,} bases in total."
     )
 
     # --------------------------------------------------------
-    # GC content and sequence length
+    # Sequence statistics
     # --------------------------------------------------------
 
     st.subheader("Sequence statistics")
 
+    overall_sequence = "".join(sequence for _, sequence in records)
+
     gc_col, length_col = st.columns(2)
 
     gc_col.metric(
-        "Whole-sequence GC content",
-        f"{calculate_gc_content(dna_sequence):.2f}%",
+        "Overall GC content",
+        f"{calculate_gc_content(overall_sequence):.2f}%",
     )
 
     length_col.metric(
-        "Sequence length",
-        f"{len(dna_sequence):,} bases",
+        "Total sequence length",
+        f"{total_bases:,} bases",
     )
+
+    if len(records) > 1:
+        st.caption(
+            "FASTA records are analysed separately to prevent ORFs "
+            "from crossing contig boundaries."
+        )
 
     # --------------------------------------------------------
     # Custom start and stop codons
@@ -574,10 +584,7 @@ def main():
             "Start codons",
             options=AVAILABLE_START_CODONS,
             default=START_CODONS,
-            help=(
-                "ATG is the default. GTG, TTG and CTG are "
-                "also available as possible bacterial start codons."
-            ),
+            help="ATG is the default. GTG, TTG and CTG are also available.",
         )
 
     with codon_col2:
@@ -595,20 +602,73 @@ def main():
         st.warning("Select at least one stop codon.")
         return
 
-    # Find ORFs using the selected codons.
-    all_orfs = find_orfs(
-        dna_sequence,
-        start_codons=start_codons,
-        stop_codons=stop_codons,
-    )
+    # --------------------------------------------------------
+    # Find ORFs in every sequence record separately
+    # --------------------------------------------------------
+
+    all_orfs = []
+
+    for record_name, sequence in records:
+
+        record_orfs = find_orfs(
+            sequence,
+            start_codons=start_codons,
+            stop_codons=stop_codons,
+        )
+
+        for orf in record_orfs:
+            orf["sequence_name"] = record_name
+
+        all_orfs.extend(record_orfs)
+
+    # Give every ORF a unique ID across all records.
+    for number, orf in enumerate(all_orfs, start=1):
+        orf["orf_id"] = f"ORF_{number}"
 
     st.write(
-        f"**Candidate ORFs detected before filtering:** "
-        f"{len(all_orfs)}"
+        f"**Candidate ORFs detected before filtering:** {len(all_orfs)}"
     )
 
+    partial_count = sum(
+        orf["orf_type"] == "Partial" for orf in all_orfs
+    )
+
+    complete_count = sum(
+        orf["orf_type"] == "Complete" for orf in all_orfs
+    )
+
+    count_col1, count_col2 = st.columns(2)
+
+    count_col1.metric("Complete ORFs found", complete_count)
+    count_col2.metric("Partial ORFs found", partial_count)
+
+    if not any(
+        codon in sequence
+        for _, sequence in records
+        for codon in start_codons
+    ) and not any(
+        codon in reverse_complement(sequence)
+        for _, sequence in records
+        for codon in start_codons
+    ):
+        st.warning("No selected start codons were found in the sequences.")
+
+    if not any(
+        codon in sequence
+        for _, sequence in records
+        for codon in stop_codons
+    ) and not any(
+        codon in reverse_complement(sequence)
+        for _, sequence in records
+        for codon in stop_codons
+    ):
+        st.warning(
+            "No selected stop codons were found. "
+            "Complete ORFs may not be detected."
+        )
+
     # --------------------------------------------------------
-    # Filtering controls
+    # Filters
     # --------------------------------------------------------
 
     st.subheader("Filter ORFs")
@@ -617,11 +677,7 @@ def main():
         "ORF type",
         options=["Complete", "Partial"],
         default=["Complete"],
-        help=(
-            "Choose Complete, Partial, or both. Complete ORFs have "
-            "a start and stop codon. Partial ORFs have a start codon "
-            "but no in-frame stop codon before the sequence ends."
-        ),
+        help="Choose Complete, Partial, or both.",
     )
 
     col1, col2, col3 = st.columns(3)
@@ -660,8 +716,7 @@ def main():
     }[strand_label]
 
     frame_value = (
-        "all"
-        if frame_label == "All"
+        "all" if frame_label == "All"
         else int(frame_label[-1])
     )
 
@@ -669,8 +724,7 @@ def main():
 
     if max_value is not None and max_value < min_length:
         st.warning(
-            "Maximum length must be greater than "
-            "or equal to minimum length."
+            "Maximum length must be greater than or equal to minimum length."
         )
         filtered_orfs = []
 
@@ -683,7 +737,6 @@ def main():
             frame=frame_value,
         )
 
-        # Apply the Complete / Partial selection.
         filtered_orfs = [
             orf for orf in filtered_orfs
             if orf["orf_type"] in orf_types
@@ -699,10 +752,7 @@ def main():
 
     metric1, metric2, metric3, metric4 = st.columns(4)
 
-    metric1.metric(
-        "ORFs after filtering",
-        stats["number_of_orfs"],
-    )
+    metric1.metric("ORFs after filtering", stats["number_of_orfs"])
 
     metric2.metric(
         "Mean length",
@@ -744,11 +794,11 @@ def main():
         st.info(
             "No ORFs match these filters. Try selecting Complete, "
             "Partial, or both; lowering the minimum length; or "
-            "changing the codon or strand/frame settings."
+            "changing the codon, strand or frame settings."
         )
 
     # --------------------------------------------------------
-    # Codon and amino acid counts
+    # Codon and amino-acid counts
     # --------------------------------------------------------
 
     with st.expander("Codon counts"):
