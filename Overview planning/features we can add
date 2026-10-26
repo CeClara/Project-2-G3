@@ -1,0 +1,78 @@
+#Features added 
+-> onwebiste allow people to see if it is completed partial nested 
++ graph about length in genral 
+longest per stop condon 
+EXAMPLE MENU 
+ORF Finder Settings
+
+->Reset
+
+ORF Length
+Minimum (nt)
+
+Maximum (nt)
+
+- graph showing freq distribution of amino acids,a nd whihc codons ahve coded for each amino acid
+
+Strand selection
+
+Both strands (+ and −)
+
+Forward strand only (+)
+
+Reverse strand only (−)
+
+Reading frames
+[x] +1
+
+[x] +2
+
+[x] +3
+
+[x] -1
+
+[x] -2
+
+[x] -3
+
+
+
+Start codons
+
+ATG only (default)
+
+ATG, GTG, TTG (alternative starts)
+
+Multiple start codons before one stop
+Report first start only
+
+Report every valid start
+
+
+Additional detection options
+[x] Include partial ORFs
+[x] Include nested ORFs
+
+Export format
+
+CSV (coordinates and statistics)
+
+6 frame mapping so you can visulally see the orfs 
+6 fram example.svg ( look at this for example) 
+-> make each block clicable
+identifies strand and length
+DNA sequence preview
+ATG GCT TTT GAA ... TAA
+Protein translation preview
+MAFE...
+
+gc content 
+-> intergenic lengths -> Coding density estimate 
+baectia start and stop 
+Minimum ORF length  ( chose )
+Start codons (custom) 
+Stop codons (custom) 
+show or not show partial orf  button 
+
+
+want to make it handle introns nope!!!!!
