@@ -1,0 +1,130 @@
+"""Dash web app for six-frame bacterial ORF finding."""
+from __future__ import annotations
+import base64
+import io
+import pandas as pd
+from dash import Dash, dcc, html, dash_table, Input, Output, State, callback, no_update
+import plotly.express as px
+import plotly.graph_objects as go
+from orf_finder.core import (clean_sequence, find_orfs, summary, codon_usage,
+                             amino_acid_composition, intergenic_lengths)
+from orf_finder.export import orfs_to_csv, orfs_to_fasta
+
+app = Dash(__name__)
+app.title = "Bacterial ORF Finder"
+server = app.server
+
+CARD = {"padding":"16px", "border":"1px solid #d7dde5", "borderRadius":"12px",
+        "background":"white", "boxShadow":"0 1px 3px rgba(0,0,0,.06)"}
+
+app.layout = html.Div([
+    dcc.Store(id="sequence-store"), dcc.Store(id="orf-store"),
+    html.H1("Bacterial ORF Finder"),
+    html.P("Detect complete ORFs across all six reading frames, rank likely coding regions, and export results."),
+    html.Div([
+        html.Div([
+            html.H3("1. Load DNA"),
+            dcc.Upload(id="upload", children=html.Div(["Drag a .txt/.fasta file here or ", html.A("choose a file")]),
+                       style={"border":"2px dashed #6b7c93", "padding":"25px", "textAlign":"center"}),
+            html.Label("Or paste DNA/FASTA"),
+            dcc.Textarea(id="sequence-input", style={"width":"100%", "height":"130px"},
+                         placeholder="ATG...TAA"),
+        ], style=CARD),
+        html.Div([
+            html.H3("2. Detection settings"),
+            html.Label("Minimum ORF length (nt)"), dcc.Input(id="min-nt", type="number", value=90, min=6, step=3),
+            html.Label(" Maximum length (blank = unlimited)"), dcc.Input(id="max-nt", type="number", min=6, step=3),
+            html.Br(), html.Label("Strand"),
+            dcc.RadioItems(id="strand", options=[{"label":"Both", "value":"both"},{"label":"Forward", "value":"+"},{"label":"Reverse", "value":"-"}], value="both", inline=True),
+            html.Label("Frames"),
+            dcc.Dropdown(id="frames", options=[{"label":str(x),"value":x} for x in [1,2,3,-1,-2,-3]], multi=True, placeholder="All frames"),
+            html.Label("Start codons"),
+            dcc.Checklist(id="starts", options=[{"label":x,"value":x} for x in ["ATG","GTG","TTG"]], value=["ATG","GTG","TTG"], inline=True),
+            html.Label("Nested candidates"),
+            dcc.RadioItems(id="nested", options=[{"label":"Return all", "value":"all"},{"label":"Longest per stop", "value":"longest"}], value="all", inline=True),
+            html.Button("Find ORFs", id="run", n_clicks=0, style={"marginTop":"14px","padding":"10px 20px"})
+        ], style=CARD),
+    ], style={"display":"grid","gridTemplateColumns":"repeat(auto-fit,minmax(320px,1fr))","gap":"16px"}),
+    html.Div(id="message", style={"margin":"14px 0","fontWeight":"600"}),
+    html.Div(id="summary-cards", style={"display":"grid","gridTemplateColumns":"repeat(auto-fit,minmax(140px,1fr))","gap":"10px"}),
+    dcc.Tabs([
+        dcc.Tab(label="ORF table", children=[
+            html.Div([html.Button("Download CSV", id="download-csv-btn"),
+                      html.Button("DNA FASTA", id="download-dna-btn"),
+                      html.Button("Protein FASTA", id="download-protein-btn")], style={"margin":"12px 0","display":"flex","gap":"8px"}),
+            dash_table.DataTable(id="orf-table", page_size=15, sort_action="native", filter_action="native",
+                style_table={"overflowX":"auto"}, style_cell={"fontFamily":"Arial","fontSize":13,"textAlign":"left","maxWidth":180,"overflow":"hidden","textOverflow":"ellipsis"})
+        ]),
+        dcc.Tab(label="Genome map", children=[dcc.Graph(id="map-plot")]),
+        dcc.Tab(label="Length distribution", children=[dcc.Graph(id="length-plot")]),
+        dcc.Tab(label="Codon usage", children=[dcc.Graph(id="codon-plot")]),
+        dcc.Tab(label="Amino acids", children=[dcc.Graph(id="aa-plot")]),
+        dcc.Tab(label="Intergenic lengths", children=[dcc.Graph(id="intergenic-plot")]),
+    ]),
+    dcc.Download(id="download-csv"), dcc.Download(id="download-dna"), dcc.Download(id="download-protein"),
+    html.P("Scores are transparent heuristics for prioritisation, not proof of gene function. Validate predictions against an annotation or specialist gene predictor.", style={"marginTop":"20px","fontSize":".9rem"})
+], style={"maxWidth":"1250px","margin":"auto","padding":"20px","fontFamily":"Arial","background":"#f6f8fb"})
+
+@callback(Output("sequence-input","value"), Input("upload","contents"), State("upload","filename"), prevent_initial_call=True)
+def load_upload(contents, filename):
+    if not contents: return no_update
+    _, encoded = contents.split(",", 1)
+    try: return base64.b64decode(encoded).decode("utf-8")
+    except Exception: return "Could not decode uploaded file. Please use a UTF-8 text file."
+
+@callback(
+    Output("sequence-store","data"), Output("orf-store","data"), Output("message","children"),
+    Output("summary-cards","children"), Output("orf-table","data"), Output("orf-table","columns"),
+    Output("map-plot","figure"), Output("length-plot","figure"), Output("codon-plot","figure"),
+    Output("aa-plot","figure"), Output("intergenic-plot","figure"),
+    Input("run","n_clicks"), State("sequence-input","value"), State("min-nt","value"),
+    State("max-nt","value"), State("strand","value"), State("frames","value"),
+    State("starts","value"), State("nested","value"), prevent_initial_call=True)
+def analyse(_, text, min_nt, max_nt, strand, frames, starts, nested):
+    empty = go.Figure()
+    try:
+        seq = clean_sequence(text or "")
+        orfs = find_orfs(seq, int(min_nt or 90), int(max_nt) if max_nt else None,
+                         strand, set(frames) if frames else None, set(starts or []), nested)
+        records = [o.to_dict() for o in orfs]
+        display_cols = ["id","strand","frame","start","end","length_nt","length_aa","start_codon","stop_codon","nested","overlap_count","rbs_motif","rbs_distance","score","confidence"]
+        table = [{k:r[k] for k in display_cols} for r in records]
+        cols = [{"name":c.replace("_"," ").title(),"id":c} for c in display_cols]
+        s = summary(orfs, len(seq))
+        cards = [html.Div([html.Div(k.replace("_"," ").title(),style={"fontSize":".8rem"}),html.B(str(v),style={"fontSize":"1.3rem"})],style=CARD) for k,v in s.items()]
+        map_fig = go.Figure()
+        colors = {"high":"#16803c","medium":"#dd8a00","low":"#c53b3b"}
+        for o in orfs[:5000]:
+            y = o.frame
+            map_fig.add_trace(go.Scatter(x=[o.start,o.end],y=[y,y],mode="lines",line={"width":8,"color":colors[o.confidence]},hovertext=f"{o.id}: {o.start}-{o.end}, score {o.score}",hoverinfo="text",showlegend=False))
+        map_fig.update_layout(title="ORF positions (first 5,000 shown)",xaxis_title="Genome coordinate",yaxis_title="Frame",height=500)
+        lengths = pd.DataFrame({"length_nt":[o.length_nt for o in orfs],"confidence":[o.confidence for o in orfs]})
+        length_fig = px.histogram(lengths,x="length_nt",color="confidence",nbins=50,title="ORF length distribution") if orfs else empty
+        codons = pd.DataFrame(codon_usage(orfs))
+        codon_fig = px.bar(codons.sort_values("frequency_per_1000",ascending=False),x="codon",y="frequency_per_1000",color="amino_acid",title="Codon usage") if orfs else empty
+        aa = pd.DataFrame(amino_acid_composition(orfs))
+        aa_fig = px.bar(aa,x="amino_acid",y="percentage",title="Amino-acid composition") if orfs else empty
+        gaps = intergenic_lengths(orfs,len(seq))
+        gap_fig = px.histogram(x=gaps,nbins=40,labels={"x":"Intergenic length (nt)"},title="Intergenic length distribution")
+        return seq, records, f"Found {len(orfs):,} complete ORFs in {len(seq):,} nt.", cards, table, cols, map_fig, length_fig, codon_fig, aa_fig, gap_fig
+    except Exception as exc:
+        return no_update, [], f"Error: {exc}", [], [], [], empty, empty, empty, empty, empty
+
+@callback(Output("download-csv","data"),Input("download-csv-btn","n_clicks"),State("orf-store","data"),prevent_initial_call=True)
+def csv_download(_, data):
+    return dcc.send_string(orfs_to_csv(_restore(data or [])), "orf_results.csv")
+
+@callback(Output("download-dna","data"),Input("download-dna-btn","n_clicks"),State("orf-store","data"),prevent_initial_call=True)
+def dna_download(_, data):
+    return dcc.send_string(orfs_to_fasta(_restore(data or [])), "orf_dna.fasta")
+
+@callback(Output("download-protein","data"),Input("download-protein-btn","n_clicks"),State("orf-store","data"),prevent_initial_call=True)
+def protein_download(_, data):
+    return dcc.send_string(orfs_to_fasta(_restore(data or []), True), "orf_proteins.fasta")
+
+def _restore(data):
+    from orf_finder.core import ORF
+    return [ORF(**row) for row in data]
+
+if __name__ == "__main__":
+    app.run(debug=True)
