@@ -167,6 +167,25 @@ def calculate_gc_content(sequence):
 # ============================================================
 # SECTION 4: FIND ORFs IN ONE READING FRAME
 # ============================================================
+def translate_orf(dna_sequence, start_codons=None):
+    """Translate complete codons, excluding the terminal stop.
+
+    For alternative initiation codons, translate the first residue as M.
+    Partial ORFs with no known start retain their ordinary first residue.
+    """
+    if start_codons is None:
+        start_codons = START_CODONS
+    amino_acids = []
+    for pos in range(0, len(dna_sequence) - 2, 3):
+        codon = dna_sequence[pos:pos + 3]
+        amino_acid = GENETIC_CODE[codon]
+        if amino_acid == "*":
+            break
+        if pos == 0 and codon in start_codons:
+            amino_acid = "M"
+        amino_acids.append(amino_acid)
+    return "".join(amino_acids)
+
 
 def find_orfs_in_frame(
     sequence,
@@ -176,95 +195,80 @@ def find_orfs_in_frame(
     start_codons=None,
     stop_codons=None,
 ):
+    """Find complete, missing-start, missing-stop and missing-both ORFs.
+
+    Frames are numbered 1..3 in the 5'-3' strand orientation.
+    Coordinates are 1-based and inclusive in the original input DNA.
+    Candidate partials are stop-delimited or extend to the sequence edge.
     """
-    Find complete and partial ORFs in one reading frame.
-
-    Complete: start codon followed by an in-frame stop codon.
-    Partial: start codon without an in-frame stop before the
-    end of this sequence.
-
-    Coordinates are 1-based and inclusive on the original sequence.
-    Complete ORF length includes the stop codon.
-    """
-
     if start_codons is None:
         start_codons = START_CODONS
-
     if stop_codons is None:
         stop_codons = STOP_CODONS
 
     orfs = []
-    active_starts = []
     offset = frame - 1
+    # Only whole codons belong to the frame; exclude dangling 1-2 bases.
+    aligned_end = offset + ((len(sequence) - offset) // 3) * 3
+    if aligned_end <= offset:
+        return orfs
 
-    for pos in range(offset, len(sequence) - 2, 3):
-
-        codon = sequence[pos:pos + 3]
-
-        # Record every start codon in this reading frame.
-        if codon in start_codons:
-            active_starts.append(pos)
-
-        # A stop codon completes every active start in this frame.
-        if codon in stop_codons and active_starts:
-
-            end_pos = pos + 2
-
-            for start_pos in active_starts:
-
-                dna_sequence = sequence[start_pos:end_pos + 1]
-
-                if strand == "+":
-                    start_coord = start_pos + 1
-                    end_coord = end_pos + 1
-                else:
-                    start_coord = genome_length - end_pos
-                    end_coord = genome_length - start_pos
-
-                orfs.append({
-                    "orf_id": "",
-                    "start": start_coord,
-                    "end": end_coord,
-                    "strand": strand,
-                    "frame": frame,
-                    "length": len(dna_sequence),
-                    "gc_content": round(
-                        calculate_gc_content(dna_sequence), 2
-                    ),
-                    "orf_type": "Complete",
-                    "dna_sequence": dna_sequence,
-                })
-
-            # The stop closes all active starts before it.
-            active_starts = []
-
-    # Any starts still active at the end have no in-frame stop.
-    # IMPORTANT: record every remaining start, not just one.
-    for start_pos in active_starts:
-
-        dna_sequence = sequence[start_pos:]
-
+    def add_orf(start_pos, end_exclusive, orf_type):
+        dna = sequence[start_pos:end_exclusive]
+        if not dna:
+            return
         if strand == "+":
             start_coord = start_pos + 1
-            end_coord = genome_length
+            end_coord = end_exclusive
         else:
-            start_coord = genome_length - len(sequence) + 1
+            start_coord = genome_length - end_exclusive + 1
             end_coord = genome_length - start_pos
-
         orfs.append({
             "orf_id": "",
             "start": start_coord,
             "end": end_coord,
             "strand": strand,
             "frame": frame,
-            "length": len(dna_sequence),
-            "gc_content": round(
-                calculate_gc_content(dna_sequence), 2
-            ),
-            "orf_type": "Partial",
-            "dna_sequence": dna_sequence,
+            "length": len(dna),
+            "gc_content": round(calculate_gc_content(dna), 2),
+            "orf_type": "Complete" if orf_type == "complete" else "Partial",
+            "partial_type": orf_type,
+            "dna_sequence": dna,
+            "amino_acid_sequence": translate_orf(dna, start_codons),
+            "nested": False,
         })
 
+    active_starts = []
+    segment_start = offset
+    for pos in range(offset, aligned_end, 3):
+        codon = sequence[pos:pos + 3]
+        if codon in start_codons:
+            active_starts.append(pos)
+        if codon in stop_codons:
+            if active_starts:
+                for start_pos in active_starts:
+                    add_orf(start_pos, pos + 3, "complete")
+            elif pos > segment_start:
+                # No start since last stop: candidate 5'-partial region.
+                add_orf(segment_start, pos + 3, "missing_start")
+            active_starts = []
+            segment_start = pos + 3
+
+    if active_starts:
+        for start_pos in active_starts:
+            add_orf(start_pos, aligned_end, "missing_stop")
+    elif segment_start < aligned_end:
+        add_orf(segment_start, aligned_end, "missing_both")
+
+    # Nested = strictly contained in a longer candidate on same strand/frame.
+    for orf in orfs:
+        orf["nested"] = any(
+            other is not orf
+            and other["start"] <= orf["start"]
+            and other["end"] >= orf["end"]
+            and other["length"] > orf["length"]
+            for other in orfs
+        )
     return orfs
 
 
@@ -801,11 +805,19 @@ def main():
     # Codon and amino-acid counts
     # --------------------------------------------------------
 
+
     with st.expander("Codon counts"):
         st.json(stats["codon_counts"])
 
     with st.expander("Amino acid counts"):
         st.json(stats["amino_acid_counts"])
+
+    if filtered_orfs:
+        st.subheader("Selected ORF amino acid translation")
+        chosen_id = st.selectbox("Select ORF", [o["orf_id"] for o in filtered_orfs])
+        chosen = next(o for o in filtered_orfs if o["orf_id"] == chosen_id)
+        st.code(chosen["amino_acid_sequence"], language="text")
+        st.caption(f"Type: {chosen['partial_type']}; nested: {chosen['nested']}")
 
 
 if __name__ == "__main__":
