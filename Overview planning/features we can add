@@ -1,14 +1,69 @@
 #Features added 
 
+
+
+EXAMPLE MENU 
+ORF Finder Settings
+
+->Reset
+
+ORF Length
+Minimum (nt)
+
+Maximum (nt)
+
+
+
+Strand selection
+
+Both strands (+ and −)
+
+Forward strand only (+)
+
+Reverse strand only (−)
+
+Reading frames
+[x] +1
+
+[x] +2
+
+[x] +3
+
+[x] -1
+
+[x] -2
+
+[x] -3
+
+
+
+Start codons
+
+ATG only (default)
+
+ATG, GTG, TTG (alternative starts)
+
+Multiple start codons before one stop
+Report first start only
+
+Report every valid start
+
+
+Additional detection options
+[x] Include partial ORFs
+[x] Include nested ORFs
+
+Export format
+
+CSV (coordinates and statistics)
+
 6 frame mapping so you can visulally see the orfs 
-6 fram example.svg 
--> make each block clicable 
+6 fram example.svg ( look at this for example) 
+-> make each block clicable
+identifies strand and length
 DNA sequence preview
-
 ATG GCT TTT GAA ... TAA
-
 Protein translation preview
-
 MAFE...
 
 gc content 
