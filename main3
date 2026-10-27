@@ -15,9 +15,6 @@ import streamlit as st
 # RECENTLY ADDED: Plotly draws interactive scientific charts and ORF tracks.
 import plotly.graph_objects as go
 
-# The six-frame map uses Streamlit's native Plotly selection support.
-# No extra click-component package is needed.
-
 
 # ============================================================
 # SECTION 1: SETTINGS AND GENETIC CODE
@@ -541,7 +538,7 @@ def make_six_frame_map(orfs, genome_length):
         height=360,
         bargap=0.28,
         margin=dict(l=45, r=15, t=55, b=48),
-        clickmode="event+select",
+        clickmode="none",
     )
     return fig
 
@@ -982,103 +979,82 @@ def main():
             "changing the codon, strand or frame settings."
         )
 
-    # RECENTLY ADDED: Charts reflect the current filters and sorting settings.
-    if not filtered_orfs:
-        st.info("No length or amino acid plots: no ORFs match the current filters.")
+    # Graph display only: tabs and manual ORF details (no graph click events).
     if filtered_orfs:
-        st.subheader("ORF length and amino acid distributions")
-        st.plotly_chart(make_length_histogram(filtered_orfs), width="stretch")
-        st.plotly_chart(
-            make_amino_acid_chart(stats["amino_acid_counts"]), width="stretch"
-        )
-        st.caption(
-            "Amino acid frequencies count each selected ORF separately; "
-            "nested or overlapping ORFs may count genomic regions more than once."
-        )
+        st.subheader("ORF graphs")
+        map_tab, length_tab, amino_tab = st.tabs([
+            "Six-frame ORF map", "ORF length distribution", "Amino acid frequency"
+        ])
 
-    # RECENTLY ADDED: Clickable six-frame map using input DNA coordinates.
-    if filtered_orfs:
-        st.subheader("Interactive six-frame ORF map")
-        sequence_names = list(dict.fromkeys(o["sequence_name"] for o in filtered_orfs))
-        map_name = st.selectbox(
-            "Sequence / FASTA record to map", sequence_names, key="map_record"
-        )
-        map_orfs = [o for o in filtered_orfs if o["sequence_name"] == map_name]
-        record_length = next(
-            len(seq) for name, seq in records if name == map_name
-        )
-        # RECENTLY ADDED: Keep large interactive maps responsive.
-        MAP_DISPLAY_LIMIT = 500
-        if len(map_orfs) > MAP_DISPLAY_LIMIT:
-            # RECENTLY ADDED: Explain that dense nested/overlapping bars can hide each other.
-            st.warning("Dense ORF regions may overlap on the map. Use filters "
-                       "or the ORF selector to inspect candidates individually.")
-            st.warning(
-                f"Showing the {MAP_DISPLAY_LIMIT} longest of {len(map_orfs)} "
-                "filtered ORFs on the map. All remain available in the selector."
+        with map_tab:
+            sequence_names = list(dict.fromkeys(o["sequence_name"] for o in filtered_orfs))
+            map_name = st.selectbox(
+                "Sequence / FASTA record to map", sequence_names, key="map_record"
             )
-        # RECENTLY ADDED: Prioritize longest candidates for a capped map, not input order.
-        visible_orfs = (sorted(map_orfs, key=lambda o: (-o["length"], o["start"]))
-                        [:MAP_DISPLAY_LIMIT])
-        st.caption(
-            "Green = complete, gold = partial. Select a coloured block "
-            "to see its DNA and protein previews; you can also use the selector below."
-        )
-        # Use Streamlit's built-in Plotly selection rather than an embedded
-        # third-party click component (which can leave the chart blank).
-        map_event = st.plotly_chart(
-            make_six_frame_map(visible_orfs, record_length),
-            use_container_width=True,
-            on_select="rerun",
-            selection_mode="points",
-            key="six_frame_orf_clicks",
-        )
+            map_orfs = [o for o in filtered_orfs if o["sequence_name"] == map_name]
+            record_length = next(
+                len(seq) for name, seq in records if name == map_name
+            )
+            MAP_DISPLAY_LIMIT = 60
+            if len(map_orfs) > MAP_DISPLAY_LIMIT:
+                st.caption(
+                    f"Showing the {MAP_DISPLAY_LIMIT} longest of {len(map_orfs)} "
+                    "ORFs on the map. All are available in the dropdown."
+                )
+            visible_orfs = sorted(
+                map_orfs, key=lambda o: (-o["length"], o["start"])
+            )[:MAP_DISPLAY_LIMIT]
+            st.caption(
+                "Hover over a coloured block for its ID, type, strand, "
+                "length and coordinates. Clicking does not open ORF details."
+            )
+            # Ordinary Plotly charts retain hover but do not send click events.
+            st.plotly_chart(
+                make_six_frame_map(visible_orfs, record_length),
+                use_container_width=True, key="six_frame_map_view"
+            )
 
-        map_ids = [o["orf_id"] for o in map_orfs]
-        map_signature = (map_name, tuple(o["orf_id"] for o in visible_orfs))
-        if st.session_state.get("last_map_signature") != map_signature:
-            st.session_state["last_map_signature"] = map_signature
-            st.session_state.pop("last_map_clicked", None)
-            # Reset the old selection when a different sequence or map is shown.
-            if st.session_state.get("map_selected_orf") not in map_ids:
-                st.session_state["map_selected_orf"] = map_ids[0]
+            map_ids = [o["orf_id"] for o in map_orfs]
+            chosen_id = st.selectbox(
+                "Select an ORF to inspect", map_ids, key="map_selected_orf"
+            )
+            if st.button("Show ORF details", key="show_map_orf_details"):
+                st.session_state["details_orf_id"] = chosen_id
+            selected_id = st.session_state.get("details_orf_id")
+            if selected_id in map_ids:
+                chosen = next(o for o in map_orfs if o["orf_id"] == selected_id)
+                detail_cols = st.columns(4)
+                detail_cols[0].metric("Strand", chosen["strand"])
+                detail_cols[1].metric("Frame", f"{chosen['strand']}{chosen['frame']}")
+                detail_cols[2].metric("Length", f"{chosen['length']} nt")
+                detail_cols[3].metric("Positions", f"{chosen['start']}–{chosen['end']}")
+                st.write(f"**ORF type:** {chosen['partial_type']} | **Nested:** {chosen['nested']}")
+                st.write("**DNA sequence preview**")
+                st.code(sequence_preview(chosen["dna_sequence"]), language="text")
+                st.write("**Protein translation preview**")
+                st.code(sequence_preview(chosen["amino_acid_sequence"]), language="text")
+                with st.expander("Full selected ORF sequences"):
+                    st.write("DNA (5′ to 3′ in coding strand orientation)")
+                    st.code(chosen["dna_sequence"], language="text")
+                    st.write("Amino acids (one-letter code; no stop symbol)")
+                    st.code(chosen["amino_acid_sequence"], language="text")
 
-        # Plotly supplies an index for a point in the single bar trace.
-        # Check bounds before looking up the corresponding ORF.
-        points = map_event.selection.points if map_event else []
-        if points:
-            point = points[-1]
-            point_index = point.get("point_index", point.get("point_number"))
-            if isinstance(point_index, int) and 0 <= point_index < len(visible_orfs):
-                clicked_id = visible_orfs[point_index]["orf_id"]
-                if clicked_id != st.session_state.get("last_map_clicked"):
-                    st.session_state["map_selected_orf"] = clicked_id
-                    st.session_state["last_map_clicked"] = clicked_id
+        with length_tab:
+            if st.checkbox("Load ORF length histogram", key="load_length_chart"):
+                st.plotly_chart(make_length_histogram(filtered_orfs), use_container_width=True)
 
-        if st.session_state.get("map_selected_orf") not in map_ids:
-            st.session_state["map_selected_orf"] = map_ids[0]
-
-        chosen_id = st.selectbox(
-            "Selected ORF (or choose manually)", map_ids,
-            key="map_selected_orf"
-        )
-        st.session_state["selected_map_orf"] = chosen_id
-        chosen = next(o for o in map_orfs if o["orf_id"] == chosen_id)
-        detail_cols = st.columns(4)
-        detail_cols[0].metric("Strand", chosen["strand"])
-        detail_cols[1].metric("Frame", f"{chosen['strand']}{chosen['frame']}")
-        detail_cols[2].metric("Length", f"{chosen['length']} nt")
-        detail_cols[3].metric("Positions", f"{chosen['start']}–{chosen['end']}")
-        st.write(f"**ORF type:** {chosen['partial_type']} | **Nested:** {chosen['nested']}")
-        st.write("**DNA sequence preview**")
-        st.code(sequence_preview(chosen["dna_sequence"]), language="text")
-        st.write("**Protein translation preview**")
-        st.code(sequence_preview(chosen["amino_acid_sequence"]), language="text")
-        with st.expander("Full selected ORF sequences"):
-            st.write("DNA (5′ to 3′ in coding strand orientation)")
-            st.code(chosen["dna_sequence"], language="text")
-            st.write("Amino acids (one-letter code; no stop symbol)")
-            st.code(chosen["amino_acid_sequence"], language="text")
+        with amino_tab:
+            if st.checkbox("Load amino acid frequency chart", key="load_amino_chart"):
+                st.plotly_chart(
+                    make_amino_acid_chart(stats["amino_acid_counts"]),
+                    use_container_width=True
+                )
+                st.caption(
+                    "Amino acid frequencies count each selected ORF separately; "
+                    "nested or overlapping ORFs may count genomic regions more than once."
+                )
+    else:
+        st.info("No graphs: no ORFs match the current filters.")
 
     # --------------------------------------------------------
     # Codon and amino-acid counts
