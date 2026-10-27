@@ -1,4 +1,4 @@
-# changedddd i may have broken it if not revert back before i made changes 
+#changedddddddddagin# i may have broken it if not revert back before i made changes 
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
 # Run with: python -m streamlit run orf_finder_reviewed.py
@@ -583,49 +583,52 @@ def make_amino_acid_chart(amino_counts):
     return fig
 
 
-# Display only: six-frame SVG map with built-in mouse-hover descriptions.
-# Unlike Plotly, this has no JavaScript, no click handlers and no reruns.
+# Display only: a six-frame HTML/CSS map with immediate hover tooltips.
+# No click handlers or Streamlit events are attached to map bars.
 def make_hover_only_map_html(orfs, genome_length):
     tracks = ["+1", "+2", "+3", "-1", "-2", "-3"]
-    elements = []
-    plot_left, plot_width = 58, 910
-    for i, track in enumerate(tracks):
-        y = 20 + i * 42
-        elements.append(f'<text x="5" y="{y + 14}" class="label">{track}</text>')
-        elements.append(
-            f'<rect x="{plot_left}" y="{y}" width="{plot_width}" height="20" '
-            'fill="#edf0f2" rx="3" />'
-        )
-    for orf in orfs:
-        track = orf["strand"] + str(orf["frame"])
-        y = 20 + tracks.index(track) * 42
-        x = plot_left + (orf["start"] - 1) / genome_length * plot_width
-        width = max(1.5, orf["length"] / genome_length * plot_width)
-        color = "#14876d" if orf["orf_type"] == "Complete" else "#d59a32"
-        tooltip = escape(
-            f'{orf["orf_id"]} | {orf["partial_type"]} | '
-            f'Strand {orf["strand"]} | Frame {track} | '
-            f'Length {orf["length"]} nt | '
-            f'Positions {orf["start"]}–{orf["end"]}', quote=True
-        )
-        elements.append(
-            f'<rect x="{x:.2f}" y="{y + 2}" width="{width:.2f}" '
-            f'height="16" fill="{color}" rx="2"><title>{tooltip}</title></rect>'
-        )
-    svg = "".join(elements)
+    parts = []
+    for track in tracks:
+        parts.append('<div class="track"><span class="track-label">'
+                     + escape(track) + '</span><div class="track-bars">')
+        for orf in orfs:
+            if orf["strand"] + str(orf["frame"]) != track:
+                continue
+            left = 100 * (orf["start"] - 1) / genome_length
+            width = 100 * orf["length"] / genome_length
+            color = "#14876d" if orf["orf_type"] == "Complete" else "#d59a32"
+            info = (
+                f'{orf["orf_id"]} | {orf["partial_type"]} | '
+                f'Strand {orf["strand"]} | Frame {track} | '
+                f'Length {orf["length"]} nt | '
+                f'Coordinates {orf["start"]}–{orf["end"]}'
+            )
+            parts.append(
+                f'<div class="orf" tabindex="0" '
+                f'style="left:{left:.5f}%;width:{max(width,0.16):.5f}%;background:{color}" '
+                f'aria-label="{escape(info, quote=True)}">'
+                f'<span class="tooltip">{escape(info)}</span></div>'
+            )
+        parts.append('</div></div>')
     return (
-        '<!doctype html><html><head><style>'
-        'body{margin:0;font-family:Arial,sans-serif;color:#68727e;}'
-        '.label{font-size:15px;fill:#68727e;}'
-        'svg{display:block;width:100%;height:290px;}'
-        '</style></head><body>'
-        f'<svg viewBox="0 0 985 285" preserveAspectRatio="none" '
-        f'xmlns="http://www.w3.org/2000/svg" role="img" '
-        f'aria-label="Six-frame ORF map, hover over bars for details">{svg}</svg>'
-        '<div style="font-size:12px;padding:4px 6px">'
-        '<span style="color:#14876d">■</span> Complete &nbsp; '
+        '<!doctype html><html><head><meta charset="utf-8"><style>'
+        'body{font:14px Arial,sans-serif;margin:0;padding:48px 8px 10px;color:#56616d;}'
+        '.track{display:flex;align-items:center;height:39px;gap:10px;}'
+        '.track-label{flex:0 0 27px;font-weight:600;}'
+        '.track-bars{height:20px;flex:1;position:relative;background:#edf0f2;border-radius:3px;}'
+        '.orf{height:16px;top:2px;position:absolute;border-radius:2px;cursor:default;}'
+        '.orf:hover,.orf:focus{outline:2px solid #273746;z-index:30;}'
+        '.tooltip{display:none;position:absolute;bottom:calc(100% + 9px);'
+        'left:0;min-width:230px;max-width:350px;width:max-content;'
+        'white-space:normal;padding:9px 12px;border-radius:5px;'
+        'background:#202b38;color:#fff;font-size:12px;line-height:1.45;'
+        'box-shadow:0 3px 10px #0004;pointer-events:none;z-index:50;}'
+        '.orf:hover .tooltip,.orf:focus .tooltip{display:block;}'
+        '.legend{padding:10px 0 0 38px;font-size:12px;}'
+        '</style></head><body>' + ''.join(parts) +
+        '<div class="legend"><span style="color:#14876d">■</span> Complete &nbsp; '
         '<span style="color:#d59a32">■</span> Partial &nbsp; '
-        'Hover for ORF details; clicks are disabled.'        '</div></body></html>'
+        'Hover for details. Clicking the map is disabled.</div></body></html>'
     )
 
 
@@ -642,7 +645,7 @@ def main():
     )
 
     st.title("🧬 ORF Finder")
-    st.caption("Graph interface: tabs + hover-only map (version 2)")
+    st.caption("Graph interface: tabs + hover-only map (version 3)")
 
     st.write(
         "Find candidate open reading frames (ORFs) in DNA sequences."
@@ -1057,27 +1060,36 @@ def main():
                     "to keep rendering quick; all remain in the selector."
                 )
             st.caption(
-                "Hover over a block to see its ID, type, strand, length and positions. "
-                "Clicking the map does not open details."
+                "Hover over a coloured block to see its ID, type, strand, frame, "
+                "length and coordinates. Clicking the map never changes your selection."
             )
-            # Lightweight, view-only map: hover works, mouse clicks cannot
-            # select ORFs, reload the app, or send messages to Streamlit.
             components.html(
                 make_hover_only_map_html(visible_orfs, record_length),
-                height=335, scrolling=False
+                height=360, scrolling=False
             )
 
-            chosen_id = st.selectbox(
-                "Choose an ORF", [o["orf_id"] for o in map_orfs],
-                key="map_selected_orf"
-            )
-            if st.button("Directed to ORF chosen", key="go_to_chosen_orf"):
-                st.session_state["details_orf_key"] = (map_name, chosen_id)
+            # Map remains non-clickable. The button explicitly unlocks manual
+            # selection controls; selecting alone never opens ORF details.
+            if not st.session_state.get("enable_orf_selection", False):
+                if st.button("Enable ORF selection", key="enable_orf_button"):
+                    st.session_state["enable_orf_selection"] = True
+                    st.rerun()
+            else:
+                if st.button("Disable ORF selection", key="disable_orf_button"):
+                    st.session_state["enable_orf_selection"] = False
+                    st.session_state.pop("details_orf_key", None)
+                    st.rerun()
+                chosen_id = st.selectbox(
+                    "Choose an ORF", [o["orf_id"] for o in map_orfs],
+                    key="map_selected_orf"
+                )
+                if st.button("Directed to ORF chosen", key="go_to_chosen_orf"):
+                    st.session_state["details_orf_key"] = (map_name, chosen_id)
 
             selection = st.session_state.get("details_orf_key")
             # Display details only after the button is clicked.
             # Changing the dropdown alone does not open a different ORF.
-            if selection and selection[0] == map_name:
+            if st.session_state.get("enable_orf_selection", False) and selection and selection[0] == map_name:
                 match = next((o for o in map_orfs if o["orf_id"] == selection[1]), None)
                 if match is not None:
                     st.markdown(f"#### Details: {match['orf_id']}")
