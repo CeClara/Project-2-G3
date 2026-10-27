@@ -1,4 +1,4 @@
-# i may have broken it if not revert back before i made changes 
+# changedddd i may have broken it if not revert back before i made changes 
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
 # Run with: python -m streamlit run orf_finder_reviewed.py
@@ -6,6 +6,7 @@
 
 import csv
 import io
+from html import escape
 import statistics
 from bisect import bisect_right
 from collections import Counter
@@ -15,8 +16,7 @@ import streamlit as st
 # RECENTLY ADDED: Plotly draws interactive scientific charts and ORF tracks.
 import plotly.graph_objects as go
 
-# RECENTLY ADDED: This open-source component handles real mouse clicks on ORF blocks.
-# Install using: pip install streamlit-plotly-events
+# Display-only HTML/CSS chart: no JavaScript mouse-click callbacks.
 import streamlit.components.v1 as components
 
 
@@ -542,8 +542,7 @@ def make_six_frame_map(orfs, genome_length):
         height=360,
         bargap=0.28,
         margin=dict(l=45, r=15, t=55, b=48),
-        clickmode="none",
-        dragmode=False,
+        clickmode="event+select",
     )
     return fig
 
@@ -584,6 +583,52 @@ def make_amino_acid_chart(amino_counts):
     return fig
 
 
+# Display only: six-frame SVG map with built-in mouse-hover descriptions.
+# Unlike Plotly, this has no JavaScript, no click handlers and no reruns.
+def make_hover_only_map_html(orfs, genome_length):
+    tracks = ["+1", "+2", "+3", "-1", "-2", "-3"]
+    elements = []
+    plot_left, plot_width = 58, 910
+    for i, track in enumerate(tracks):
+        y = 20 + i * 42
+        elements.append(f'<text x="5" y="{y + 14}" class="label">{track}</text>')
+        elements.append(
+            f'<rect x="{plot_left}" y="{y}" width="{plot_width}" height="20" '
+            'fill="#edf0f2" rx="3" />'
+        )
+    for orf in orfs:
+        track = orf["strand"] + str(orf["frame"])
+        y = 20 + tracks.index(track) * 42
+        x = plot_left + (orf["start"] - 1) / genome_length * plot_width
+        width = max(1.5, orf["length"] / genome_length * plot_width)
+        color = "#14876d" if orf["orf_type"] == "Complete" else "#d59a32"
+        tooltip = escape(
+            f'{orf["orf_id"]} | {orf["partial_type"]} | '
+            f'Strand {orf["strand"]} | Frame {track} | '
+            f'Length {orf["length"]} nt | '
+            f'Positions {orf["start"]}–{orf["end"]}', quote=True
+        )
+        elements.append(
+            f'<rect x="{x:.2f}" y="{y + 2}" width="{width:.2f}" '
+            f'height="16" fill="{color}" rx="2"><title>{tooltip}</title></rect>'
+        )
+    svg = "".join(elements)
+    return (
+        '<!doctype html><html><head><style>'
+        'body{margin:0;font-family:Arial,sans-serif;color:#68727e;}'
+        '.label{font-size:15px;fill:#68727e;}'
+        'svg{display:block;width:100%;height:290px;}'
+        '</style></head><body>'
+        f'<svg viewBox="0 0 985 285" preserveAspectRatio="none" '
+        f'xmlns="http://www.w3.org/2000/svg" role="img" '
+        f'aria-label="Six-frame ORF map, hover over bars for details">{svg}</svg>'
+        '<div style="font-size:12px;padding:4px 6px">'
+        '<span style="color:#14876d">■</span> Complete &nbsp; '
+        '<span style="color:#d59a32">■</span> Partial &nbsp; '
+        'Hover for ORF details; clicks are disabled.'        '</div></body></html>'
+    )
+
+
 # ============================================================
 # SECTION 9: STREAMLIT WEBSITE
 # ============================================================
@@ -597,6 +642,7 @@ def main():
     )
 
     st.title("🧬 ORF Finder")
+    st.caption("Graph interface: tabs + hover-only map (version 2)")
 
     st.write(
         "Find candidate open reading frames (ORFs) in DNA sequences."
@@ -1014,21 +1060,18 @@ def main():
                 "Hover over a block to see its ID, type, strand, length and positions. "
                 "Clicking the map does not open details."
             )
-            map_figure = make_six_frame_map(visible_orfs, record_length)
-            # An isolated chart keeps Plotly mouse events out of Streamlit.
-            # Hover is still interactive; there are no chart selection callbacks.
-            map_html = map_figure.to_html(
-                full_html=False, include_plotlyjs=True,
-                config={"displayModeBar": False, "doubleClick": False,
-                        "scrollZoom": False, "responsive": True}
+            # Lightweight, view-only map: hover works, mouse clicks cannot
+            # select ORFs, reload the app, or send messages to Streamlit.
+            components.html(
+                make_hover_only_map_html(visible_orfs, record_length),
+                height=335, scrolling=False
             )
-            components.html(map_html, height=400, scrolling=False)
 
             chosen_id = st.selectbox(
                 "Choose an ORF", [o["orf_id"] for o in map_orfs],
                 key="map_selected_orf"
             )
-            if st.button("Go to chosen ORF", key="go_to_chosen_orf"):
+            if st.button("Directed to ORF chosen", key="go_to_chosen_orf"):
                 st.session_state["details_orf_key"] = (map_name, chosen_id)
 
             selection = st.session_state.get("details_orf_key")
