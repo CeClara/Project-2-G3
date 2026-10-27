@@ -15,6 +15,10 @@ import streamlit as st
 # RECENTLY ADDED: Plotly draws interactive scientific charts and ORF tracks.
 import plotly.graph_objects as go
 
+# RECENTLY ADDED: This open-source component handles real mouse clicks on ORF blocks.
+# Install using: pip install streamlit-plotly-events
+import streamlit.components.v1 as components
+
 
 # ============================================================
 # SECTION 1: SETTINGS AND GENETIC CODE
@@ -539,6 +543,7 @@ def make_six_frame_map(orfs, genome_length):
         bargap=0.28,
         margin=dict(l=45, r=15, t=55, b=48),
         clickmode="none",
+        dragmode=False,
     )
     return fig
 
@@ -979,11 +984,12 @@ def main():
             "changing the codon, strand or frame settings."
         )
 
-    # Graph display only: tabs and manual ORF details (no graph click events).
+    # Graphs only: genuine Streamlit tabs. The map runs in an isolated HTML
+    # frame: Plotly hover works, but mouse clicks are never sent to Streamlit.
     if filtered_orfs:
         st.subheader("ORF graphs")
         map_tab, length_tab, amino_tab = st.tabs([
-            "Six-frame ORF map", "ORF length distribution", "Amino acid frequency"
+            "Six-frame ORF map", "ORF lengths", "Amino acid frequencies"
         ])
 
         with map_tab:
@@ -992,52 +998,61 @@ def main():
                 "Sequence / FASTA record to map", sequence_names, key="map_record"
             )
             map_orfs = [o for o in filtered_orfs if o["sequence_name"] == map_name]
-            record_length = next(
-                len(seq) for name, seq in records if name == map_name
-            )
+            record_length = next(len(seq) for name, seq in records if name == map_name)
+
+            # Display limit changes only the GRAPH, never the biological results.
             MAP_DISPLAY_LIMIT = 60
-            if len(map_orfs) > MAP_DISPLAY_LIMIT:
-                st.caption(
-                    f"Showing the {MAP_DISPLAY_LIMIT} longest of {len(map_orfs)} "
-                    "ORFs on the map. All are available in the dropdown."
-                )
             visible_orfs = sorted(
                 map_orfs, key=lambda o: (-o["length"], o["start"])
             )[:MAP_DISPLAY_LIMIT]
+            if len(map_orfs) > MAP_DISPLAY_LIMIT:
+                st.caption(
+                    f"Map shows {MAP_DISPLAY_LIMIT} of {len(map_orfs)} ORFs "
+                    "to keep rendering quick; all remain in the selector."
+                )
             st.caption(
-                "Hover over a coloured block for its ID, type, strand, "
-                "length and coordinates. Clicking does not open ORF details."
+                "Hover over a block to see its ID, type, strand, length and positions. "
+                "Clicking the map does not open details."
             )
-            # Ordinary Plotly charts retain hover but do not send click events.
-            st.plotly_chart(
-                make_six_frame_map(visible_orfs, record_length),
-                use_container_width=True, key="six_frame_map_view"
+            map_figure = make_six_frame_map(visible_orfs, record_length)
+            # An isolated chart keeps Plotly mouse events out of Streamlit.
+            # Hover is still interactive; there are no chart selection callbacks.
+            map_html = map_figure.to_html(
+                full_html=False, include_plotlyjs=True,
+                config={"displayModeBar": False, "doubleClick": False,
+                        "scrollZoom": False, "responsive": True}
             )
+            components.html(map_html, height=400, scrolling=False)
 
-            map_ids = [o["orf_id"] for o in map_orfs]
             chosen_id = st.selectbox(
-                "Select an ORF to inspect", map_ids, key="map_selected_orf"
+                "Choose an ORF", [o["orf_id"] for o in map_orfs],
+                key="map_selected_orf"
             )
-            if st.button("Show ORF details", key="show_map_orf_details"):
-                st.session_state["details_orf_id"] = chosen_id
-            selected_id = st.session_state.get("details_orf_id")
-            if selected_id in map_ids:
-                chosen = next(o for o in map_orfs if o["orf_id"] == selected_id)
-                detail_cols = st.columns(4)
-                detail_cols[0].metric("Strand", chosen["strand"])
-                detail_cols[1].metric("Frame", f"{chosen['strand']}{chosen['frame']}")
-                detail_cols[2].metric("Length", f"{chosen['length']} nt")
-                detail_cols[3].metric("Positions", f"{chosen['start']}–{chosen['end']}")
-                st.write(f"**ORF type:** {chosen['partial_type']} | **Nested:** {chosen['nested']}")
-                st.write("**DNA sequence preview**")
-                st.code(sequence_preview(chosen["dna_sequence"]), language="text")
-                st.write("**Protein translation preview**")
-                st.code(sequence_preview(chosen["amino_acid_sequence"]), language="text")
-                with st.expander("Full selected ORF sequences"):
-                    st.write("DNA (5′ to 3′ in coding strand orientation)")
-                    st.code(chosen["dna_sequence"], language="text")
-                    st.write("Amino acids (one-letter code; no stop symbol)")
-                    st.code(chosen["amino_acid_sequence"], language="text")
+            if st.button("Go to chosen ORF", key="go_to_chosen_orf"):
+                st.session_state["details_orf_key"] = (map_name, chosen_id)
+
+            selection = st.session_state.get("details_orf_key")
+            # Display details only after the button is clicked.
+            # Changing the dropdown alone does not open a different ORF.
+            if selection and selection[0] == map_name:
+                match = next((o for o in map_orfs if o["orf_id"] == selection[1]), None)
+                if match is not None:
+                    st.markdown(f"#### Details: {match['orf_id']}")
+                    detail_cols = st.columns(4)
+                    detail_cols[0].metric("Strand", match["strand"])
+                    detail_cols[1].metric("Frame", f"{match['strand']}{match['frame']}")
+                    detail_cols[2].metric("Length", f"{match['length']} nt")
+                    detail_cols[3].metric("Positions", f"{match['start']}–{match['end']}")
+                    st.write(f"**ORF type:** {match['partial_type']} | **Nested:** {match['nested']}")
+                    st.write("**DNA sequence preview**")
+                    st.code(sequence_preview(match["dna_sequence"]), language="text")
+                    st.write("**Protein translation preview**")
+                    st.code(sequence_preview(match["amino_acid_sequence"]), language="text")
+                    with st.expander("Full selected ORF sequences"):
+                        st.write("DNA (5′ to 3′ in coding strand orientation)")
+                        st.code(match["dna_sequence"], language="text")
+                        st.write("Amino acids (one-letter code; no stop symbol)")
+                        st.code(match["amino_acid_sequence"], language="text")
 
         with length_tab:
             if st.checkbox("Load ORF length histogram", key="load_length_chart"):
@@ -1066,12 +1081,6 @@ def main():
     with st.expander("Amino acid counts"):
         st.json(stats["amino_acid_counts"])
 
-    if filtered_orfs:
-        st.subheader("Selected ORF amino acid translation")
-        chosen_id = st.selectbox("Select ORF", [o["orf_id"] for o in filtered_orfs])
-        chosen = next(o for o in filtered_orfs if o["orf_id"] == chosen_id)
-        st.code(chosen["amino_acid_sequence"], language="text")
-        st.caption(f"Type: {chosen['partial_type']}; nested: {chosen['nested']}")
 
 
 if __name__ == "__main__":
