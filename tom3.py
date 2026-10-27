@@ -25,10 +25,10 @@ from functools import lru_cache
 from itertools import product
 from typing import Optional
 
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import streamlit as st
+import pandas as pd  # type: ignore[import-not-found]
+from plotly import express as px  # type: ignore[reportMissingImports, import-not-found]
+import plotly.graph_objects as go  # type: ignore[reportMissingImports, import-not-found]
+import streamlit as st  # type: ignore[import-not-found]
 
 # ======================================================================
 # 1. ORF FINDING
@@ -48,7 +48,7 @@ _COMPLEMENT = str.maketrans("ACGTN", "TGCAN")
 
 DISPLAY_COLS = ["id", "strand", "frame", "start", "end", "length_nt", "length_aa",
                 "start_codon", "stop_codon", "nested", "overlap_count",
-                "rbs_motif", "rbs_distance", "score", "confidence"]
+                "rbs_motif", "rbs_distance", "score"]
 
 
 @dataclass
@@ -67,7 +67,6 @@ class ORF:
     rbs_motif: str
     rbs_distance: Optional[int]
     score: float
-    confidence: str
 
 
 def get_reverse_complement(sequence: str) -> str:
@@ -165,10 +164,6 @@ def _score(o: ORF) -> float:
     return round(max(0.0, min(100.0, length + start + rbs + bonus - penalty)), 1)
 
 
-def _confidence(score: float) -> str:
-    return "high" if score >= 65 else "medium" if score >= 40 else "low"
-
-
 def find_orfs(seq: str, min_nt: int = 90, max_nt: Optional[int] = None,
               strand: str = "both", frames=None, starts=None,
               nested: str = "all") -> list[ORF]:
@@ -217,7 +212,7 @@ def find_orfs(seq: str, min_nt: int = 90, max_nt: Optional[int] = None,
                             start_codon=s[p:p + 3], stop_codon=stop_codon,
                             nested=(p != first), overlap_count=0,
                             rbs_motif=motif, rbs_distance=dist,
-                            score=0.0, confidence="low"))
+                            score=0.0))
                 lo = hi
 
     orfs.sort(key=lambda o: (o.start, o.end, o.strand))
@@ -225,7 +220,6 @@ def find_orfs(seq: str, min_nt: int = 90, max_nt: Optional[int] = None,
     for i, o in enumerate(orfs, 1):
         o.id = f"ORF_{i:05d}"
         o.score = _score(o)
-        o.confidence = _confidence(o.score)
     return orfs
 
 
@@ -268,16 +262,12 @@ def _covered_bases(orfs: list[ORF]) -> int:
 
 def summary(orfs: list[ORF], seq_len: int) -> dict:
     n = len(orfs)
-    conf = Counter(o.confidence for o in orfs)
     lengths = [o.length_nt for o in orfs]
     return {
         "total_orfs": n,
         "genome_length_nt": seq_len,
         "forward_orfs": sum(o.strand == "+" for o in orfs),
         "reverse_orfs": sum(o.strand == "-" for o in orfs),
-        "high_confidence": conf["high"],
-        "medium_confidence": conf["medium"],
-        "low_confidence": conf["low"],
         "mean_length_nt": round(sum(lengths) / n, 1) if n else 0,
         "longest_orf_nt": max(lengths) if n else 0,
         "coding_density_pct": round(100 * _covered_bases(orfs) / seq_len, 1) if seq_len else 0,
@@ -337,7 +327,7 @@ def orfs_to_fasta(orfs: list[ORF], seq: str, protein: bool = False) -> str:
     lines = []
     for o in orfs:
         lines.append(f">{o.id} strand={o.strand} frame={o.frame} {o.start}-{o.end} "
-                     f"len_nt={o.length_nt} score={o.score} confidence={o.confidence}")
+                     f"len_nt={o.length_nt} score={o.score}")
         body = orf_protein(o, seq) if protein else orf_dna(o, seq)
         lines.extend(body[i:i + 60] for i in range(0, len(body), 60))
     return "\n".join(lines) + "\n" if lines else ""
@@ -346,29 +336,23 @@ def orfs_to_fasta(orfs: list[ORF], seq: str, protein: bool = False) -> str:
 # ======================================================================
 # 4. PLOTS
 # ======================================================================
-COLORS = {"high": "#16803c", "medium": "#dd8a00", "low": "#c53b3b"}
+MAP_COLOR = "#2563eb"
 MAX_MAP_ORFS = 5000
 
 
 def build_figures(orfs, reps, codon_rows, aa_rows, gaps):
     empty = go.Figure()
 
-    # Genome map: one trace per confidence level (much faster than one trace per ORF)
-    map_fig = go.Figure()
-    shown = reps[:MAX_MAP_ORFS]
-    for conf, colour in COLORS.items():
-        xs, ys, hover = [], [], []
-        for o in shown:
-            if o.confidence != conf:
-                continue
-            text = f"{o.id}: {o.start}-{o.end}, score {o.score}"
-            xs += [o.start, o.end, None]
-            ys += [o.frame, o.frame, None]
-            hover += [text, text, None]
-        if xs:
-            map_fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name=conf,
-                                         line={"width": 8, "color": colour},
-                                         hovertext=hover, hoverinfo="text"))
+    # Genome map: a single trace (much faster than one trace per ORF)
+    xs, ys, hover = [], [], []
+    for o in reps[:MAX_MAP_ORFS]:
+        text = f"{o.id}: {o.start}-{o.end}, score {o.score}"
+        xs += [o.start, o.end, None]
+        ys += [o.frame, o.frame, None]
+        hover += [text, text, None]
+    map_fig = go.Figure(go.Scatter(x=xs, y=ys, mode="lines", showlegend=False,
+                                   line={"width": 8, "color": MAP_COLOR},
+                                   hovertext=hover, hoverinfo="text"))
     map_fig.update_layout(
         title=f"ORF positions (longest ORF per stop; first {MAX_MAP_ORFS:,} shown)",
         xaxis_title="Genome coordinate", yaxis_title="Frame", height=500)
@@ -376,10 +360,9 @@ def build_figures(orfs, reps, codon_rows, aa_rows, gaps):
     if not orfs:
         return map_fig, empty, empty, empty, empty
 
-    lengths = pd.DataFrame({"length_nt": [o.length_nt for o in orfs],
-                            "confidence": [o.confidence for o in orfs]})
-    length_fig = px.histogram(lengths, x="length_nt", color="confidence", nbins=50,
-                              color_discrete_map=COLORS, title="ORF length distribution")
+    lengths = pd.DataFrame({"length_nt": [o.length_nt for o in orfs]})
+    length_fig = px.histogram(lengths, x="length_nt", nbins=50,
+                              title="ORF length distribution")
 
     codons = pd.DataFrame(codon_rows).sort_values("frequency_per_1000", ascending=False)
     codon_fig = px.bar(codons, x="codon", y="frequency_per_1000", color="amino_acid",
@@ -500,12 +483,7 @@ def main() -> None:
             b3.download_button("Protein FASTA", res["protein_fasta"],
                                "orf_proteins.fasta", "text/plain")
 
-            table = res["table"]
-            conf_filter = st.multiselect("Filter by confidence", ["high", "medium", "low"],
-                                         default=["high", "medium", "low"])
-            if not table.empty:
-                table = table[table["confidence"].isin(conf_filter)]
-            st.dataframe(table, use_container_width=True, hide_index=True)
+            st.dataframe(res["table"], use_container_width=True, hide_index=True)
 
         with tab_map:
             st.plotly_chart(map_fig, use_container_width=True)
