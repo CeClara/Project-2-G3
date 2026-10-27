@@ -1,4 +1,4 @@
-# version 5 i may have broken it if not revert back before i made changes 
+# version 5 green  i may have broken it if not revert back before i made changes 
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
 # Run with: python -m streamlit run orf_finder_reviewed.py
@@ -705,7 +705,7 @@ def make_codon_usage_chart(codon_counts):
 def main():
 
     # Use the ORF icon saved alongside this Python file.
-    icon_path = Path(__file__).resolve().parent / "orf_icon.png"
+    icon_path = Path(__file__).resolve().parent / "Green DNA Helix Emblem.png"
 
     st.set_page_config(
         page_title="ORF Finder",
@@ -715,7 +715,7 @@ def main():
 
     icon_col, title_col = st.columns([1, 11], vertical_alignment="center")
     with icon_col:
-        st.image(str(icon_path), width=64)
+        st.image(str(icon_path), width=40)
     with title_col:
         st.title("ORF Finder")
 
