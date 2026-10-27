@@ -1,9 +1,10 @@
-# check2 i may have broken it if not revert back before i made changes 
+# version 5 i may have broken it if not revert back before i made changes 
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
 # Run with: python -m streamlit run orf_finder_reviewed.py
 # ============================================================
 
+from pathlib import Path
 import csv
 import io
 from html import escape
@@ -701,16 +702,22 @@ def make_codon_usage_chart(codon_counts):
 # SECTION 9: STREAMLIT WEBSITE
 # ============================================================
 
-
 def main():
+
+    # Use the ORF icon saved alongside this Python file.
+    icon_path = Path(__file__).resolve().parent / "orf_icon.png"
 
     st.set_page_config(
         page_title="ORF Finder",
-        page_icon="🧬",
+        page_icon=str(icon_path),
         layout="wide",
     )
 
-    st.title("🧬 ORF Finder")
+    icon_col, title_col = st.columns([1, 11], vertical_alignment="center")
+    with icon_col:
+        st.image(str(icon_path), width=64)
+    with title_col:
+        st.title("ORF Finder")
 
     with st.expander("View Tool Features"):
         st.write(
@@ -731,7 +738,6 @@ def main():
         "Length is in nucleotides including the stop for complete ORFs; "
         "protein translation excludes the stop. Standard genetic code (table 1)."
     )
-
 
     # --------------------------------------------------------
     # DNA input
