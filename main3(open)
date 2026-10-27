@@ -701,6 +701,7 @@ def make_codon_usage_chart(codon_counts):
 # SECTION 9: STREAMLIT WEBSITE
 # ============================================================
 
+
 def main():
 
     st.set_page_config(
@@ -710,7 +711,13 @@ def main():
     )
 
     st.title("🧬 ORF Finder")
-    st.caption("Graph interface: tabs + hover-only map (version 3)")
+
+    with st.expander("View Tool Features"):
+        st.write(
+            "Analyse DNA sequence length and GC content; identify complete and partial ORFs "
+            "across six reading frames; explore ORF lengths, amino acid frequencies, "
+            "intergenic distances and codon usage; and view protein translations."
+        )
 
     st.write(
         "Find candidate open reading frames (ORFs) in DNA sequences."
@@ -724,6 +731,7 @@ def main():
         "Length is in nucleotides including the stop for complete ORFs; "
         "protein translation excludes the stop. Standard genetic code (table 1)."
     )
+
 
     # --------------------------------------------------------
     # DNA input
