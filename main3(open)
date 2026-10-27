@@ -632,6 +632,71 @@ def make_hover_only_map_html(orfs, genome_length):
     )
 
 
+# GRAPH ONLY: gaps between unions of candidate ORF intervals on each record.
+# These are candidate-ORF-free intervals, not verified intergenic regions.
+def calculate_orf_free_gaps(orfs):
+    by_record = {}
+    for orf in orfs:
+        by_record.setdefault(orf["sequence_name"], []).append(
+            (orf["start"], orf["end"])
+        )
+    gaps = []
+    for record_name, intervals in by_record.items():
+        intervals.sort()
+        _, covered_end = intervals[0]
+        for start, end in intervals[1:]:
+            if start > covered_end + 1:
+                gaps.append({"record": record_name, "length": start - covered_end - 1})
+            covered_end = max(covered_end, end)
+    return gaps
+
+
+def make_intergenic_length_chart(orfs):
+    gaps = calculate_orf_free_gaps(orfs)
+    fig = go.Figure()
+    if gaps:
+        fig.add_trace(go.Histogram(
+            x=[gap["length"] for gap in gaps],
+            nbinsx=min(30, max(5, int(len(gaps) ** 0.5))),
+            marker_color="#14876d",
+            hovertemplate="Gap length: %{x} nt<br>Count: %{y}<extra></extra>",
+        ))
+    else:
+        fig.add_annotation(
+            text="No uncovered gaps between selected candidate ORFs",
+            x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False,
+        )
+    fig.update_layout(
+        title="Candidate ORF-free interval lengths",
+        xaxis_title="Uncovered gap length (nt)",
+        yaxis_title="Number of gaps", height=360,
+        margin=dict(l=55, r=20, t=55, b=55),
+    )
+    return fig, gaps
+
+
+def make_codon_usage_chart(codon_counts):
+    # All 64 codons, including those with zero counts; follow existing
+    # calculate_statistics() rules for which codons are counted.
+    bases = "TCAG"
+    prefixes = [a + b for a in bases for b in bases]
+    counts = [[codon_counts.get(prefix + third, 0) for third in bases]
+              for prefix in prefixes]
+    codons = [[prefix + third for third in bases] for prefix in prefixes]
+    fig = go.Figure(go.Heatmap(
+        z=counts, x=list(bases), y=prefixes, customdata=codons,
+        colorscale="Viridis", colorbar=dict(title="Count"),
+        hovertemplate="Codon: %{customdata}<br>Count: %{z}<extra></extra>",
+    ))
+    fig.update_layout(
+        title="Codon usage across selected ORFs (64 codons)",
+        xaxis_title="Third base", yaxis_title="First two bases",
+        height=550, margin=dict(l=80, r=30, t=60, b=55),
+        yaxis=dict(autorange="reversed"),
+    )
+    return fig
+
+
 # ============================================================
 # SECTION 9: STREAMLIT WEBSITE
 # ============================================================
@@ -1037,8 +1102,9 @@ def main():
     # frame: Plotly hover works, but mouse clicks are never sent to Streamlit.
     if filtered_orfs:
         st.subheader("ORF graphs")
-        map_tab, length_tab, amino_tab = st.tabs([
-            "Six-frame ORF map", "ORF lengths", "Amino acid frequencies"
+        map_tab, length_tab, amino_tab, gap_tab, codon_tab = st.tabs([
+            "Six-frame ORF map", "ORF lengths", "Amino acid frequencies",
+            "Intergenic lengths", "Codon usage"
         ])
 
         with map_tab:
@@ -1120,6 +1186,28 @@ def main():
             st.caption(
                 "Amino acid frequencies count each selected ORF separately; "
                 "nested or overlapping ORFs may count genomic regions more than once."
+            )
+        with gap_tab:
+            gap_chart, gaps = make_intergenic_length_chart(filtered_orfs)
+            st.plotly_chart(gap_chart, use_container_width=True)
+            st.caption(
+                f"{len(gaps)} uncovered gaps between candidate ORF intervals. "
+                "Overlapping/nested ORFs are merged; intervals are evaluated "
+                "within each FASTA record, including both strands. "
+                "These are not confirmed intergenic regions without gene annotations. "
+                "The graph changes with your ORF filters."
+            )
+
+        with codon_tab:
+            st.plotly_chart(
+                make_codon_usage_chart(stats["codon_counts"]),
+                use_container_width=True
+            )
+            st.caption(
+                "Heatmap of all 64 DNA codons: each row gives the first two "
+                "bases and each column the third base. Uses existing ORF "
+                "codon counts, excluding stop codons. Nested/overlapping "
+                "candidates can count the same genomic sequence more than once."
             )
     else:
         st.info("No graphs: no ORFs match the current filters.")
