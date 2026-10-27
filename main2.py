@@ -74,7 +74,7 @@ def validate_dna(dnaseq):
 
 
 def parse_fasta(file_text):
-    """Read plain DNA text or FASTA records separately."""
+    """Read plain DNA text or separate FASTA records."""
 
     lines = file_text.splitlines()
     has_headers = any(line.strip().startswith(">") for line in lines)
@@ -513,74 +513,299 @@ def main():
         "Complete ORF lengths include the stop codon."
     )
 
-    # DNA input
-    input_method = st.radio(
-        "Choose how to provide your DNA sequence:",
-        ["Paste or type DNA", "Upload a DNA file"],
-        horizontal=True,
-    )
+    # ========================================================
+    # ALL SETTINGS AND DNA INPUT BEFORE SUBMISSION
+    # ========================================================
 
-    if input_method == "Paste or type DNA":
-        dna_text = st.text_area(
-            "DNA sequence",
-            placeholder="Paste or type DNA using A, T, G and C...",
-            height=160,
+    with st.form("orf_finder_form"):
+
+        # ----------------------------------------------------
+        # 1. CODON SETTINGS
+        # ----------------------------------------------------
+
+        st.subheader("1. Choose codons")
+
+        codon_col1, codon_col2 = st.columns(2)
+
+        with codon_col1:
+            start_codons = st.multiselect(
+                "Start codons",
+                options=AVAILABLE_START_CODONS,
+                default=START_CODONS,
+                help="Select one or more codons that can start an ORF.",
+            )
+
+        with codon_col2:
+            stop_codons = st.multiselect(
+                "Stop codons",
+                options=AVAILABLE_STOP_CODONS,
+                default=STOP_CODONS,
+                help="Select one or more codons that end a complete ORF.",
+            )
+
+        # ----------------------------------------------------
+        # 2. OVERLAPPING ORFs
+        # ----------------------------------------------------
+
+        st.subheader("2. Overlapping ORF reporting")
+
+        overlap_mode = st.radio(
+            "How should overlapping ORFs be reported?",
+            options=[
+                "Keep all candidates (including overlaps)",
+                "Keep only the longest ORF for each stop codon",
+            ],
+            index=0,
+            help=(
+                "Keeping all candidates reports every start codon "
+                "that reaches a stop. Longest-only keeps the earliest "
+                "start for each stop within a reading frame."
+            ),
         )
 
-        if st.button("Find ORFs", type="primary"):
-            sequence = validate_dna(dna_text)
+        # ----------------------------------------------------
+        # 3. RESULT FILTERS
+        # ----------------------------------------------------
 
-            if sequence is False:
-                st.error(
-                    "Enter a non-empty DNA sequence containing "
-                    "only A, T, G and C."
-                )
-                st.session_state.pop("orf_records", None)
-            else:
-                st.session_state["orf_records"] = [
-                    ("Sequence 1", sequence)
-                ]
+        st.subheader("3. Set filters before analysing")
 
-    else:
-        uploaded_file = st.file_uploader(
-            "Upload a DNA text or FASTA file",
-            type=["txt", "fasta", "fa", "fna"],
+        type_col, min_col, max_col = st.columns(3)
+
+        with type_col:
+            orf_types = st.multiselect(
+                "ORF type",
+                options=["Complete", "Partial"],
+                default=["Complete", "Partial"],
+                help="Choose Complete, Partial, or both.",
+            )
+
+        with min_col:
+            min_length = st.number_input(
+                "Minimum length (bases)",
+                min_value=0,
+                value=MIN_ORF_LENGTH,
+                step=3,
+                help="Exclude ORFs shorter than this length.",
+            )
+
+        with max_col:
+            max_length = st.number_input(
+                "Maximum length (0 = no maximum)",
+                min_value=0,
+                value=0,
+                step=3,
+                help="Use 0 to set no maximum length.",
+            )
+
+        strand_col, frame_col = st.columns(2)
+
+        with strand_col:
+            strand_label = st.selectbox(
+                "Strand",
+                ["Both", "Forward (+)", "Reverse (-)"],
+            )
+
+        with frame_col:
+            frame_label = st.selectbox(
+                "Reading frame",
+                ["All", "Frame 1", "Frame 2", "Frame 3"],
+            )
+
+        # ----------------------------------------------------
+        # 4. DNA INPUT
+        # ----------------------------------------------------
+
+        st.subheader("4. Enter or upload your DNA")
+
+        input_method = st.radio(
+            "Choose how to provide your DNA sequence:",
+            ["Paste or type DNA", "Upload a DNA file"],
+            horizontal=True,
         )
 
-        if st.button("Find ORFs", type="primary"):
-            if uploaded_file is None:
-                st.error("Please upload a DNA file first.")
-                st.session_state.pop("orf_records", None)
-            else:
-                try:
+        dna_text = ""
+        uploaded_file = None
+
+        if input_method == "Paste or type DNA":
+            dna_text = st.text_area(
+                "DNA sequence",
+                placeholder="Paste or type DNA using A, T, G and C...",
+                height=160,
+            )
+
+        else:
+            uploaded_file = st.file_uploader(
+                "Upload a DNA text or FASTA file",
+                type=["txt", "fasta", "fa", "fna"],
+            )
+
+        # All settings above are applied when this is clicked.
+        submitted = st.form_submit_button(
+            "Find ORFs",
+            type="primary",
+        )
+
+    # ========================================================
+    # PROCESS THE SUBMITTED SETTINGS AND DNA
+    # ========================================================
+
+    if submitted:
+
+        if not start_codons:
+            st.error("Select at least one start codon.")
+            st.session_state.pop("orf_results", None)
+
+        elif not stop_codons:
+            st.error("Select at least one stop codon.")
+            st.session_state.pop("orf_results", None)
+
+        elif not orf_types:
+            st.error("Select at least one ORF type.")
+            st.session_state.pop("orf_results", None)
+
+        elif max_length != 0 and max_length < min_length:
+            st.error(
+                "Maximum length must be greater than or equal "
+                "to minimum length."
+            )
+            st.session_state.pop("orf_results", None)
+
+        else:
+            records = []
+
+            try:
+                if input_method == "Paste or type DNA":
+
+                    sequence = validate_dna(dna_text)
+
+                    if sequence is False:
+                        st.error(
+                            "Enter a non-empty DNA sequence containing "
+                            "only A, T, G and C."
+                        )
+
+                    else:
+                        records = [("Sequence 1", sequence)]
+
+                elif uploaded_file is None:
+                    st.error("Please upload a DNA file first.")
+
+                else:
                     file_text = uploaded_file.getvalue().decode("utf-8")
                     records = parse_fasta(file_text)
 
                     if not records:
                         st.error("No valid DNA sequences were found.")
-                        st.session_state.pop("orf_records", None)
-                    else:
-                        st.session_state["orf_records"] = records
 
-                except (UnicodeError, ValueError) as error:
-                    st.error(f"Could not read DNA file: {error}")
-                    st.session_state.pop("orf_records", None)
+            except (UnicodeError, ValueError) as error:
+                st.error(f"Could not read DNA file: {error}")
+                records = []
 
-    if "orf_records" not in st.session_state:
+            if records:
+
+                report_overlaps = (
+                    overlap_mode
+                    == "Keep all candidates (including overlaps)"
+                )
+
+                all_orfs = []
+
+                # Find ORFs separately in every sequence.
+                for record_name, sequence in records:
+
+                    record_orfs = find_orfs(
+                        sequence,
+                        start_codons=start_codons,
+                        stop_codons=stop_codons,
+                        report_overlaps=report_overlaps,
+                    )
+
+                    for orf in record_orfs:
+                        orf["sequence_name"] = record_name
+
+                    all_orfs.extend(record_orfs)
+
+                # Assign unique IDs across all records.
+                for number, orf in enumerate(all_orfs, start=1):
+                    orf["orf_id"] = f"ORF_{number}"
+
+                strand_value = {
+                    "Both": "both",
+                    "Forward (+)": "+",
+                    "Reverse (-)": "-",
+                }[strand_label]
+
+                frame_value = (
+                    "all"
+                    if frame_label == "All"
+                    else int(frame_label[-1])
+                )
+
+                max_value = (
+                    None if max_length == 0 else int(max_length)
+                )
+
+                # Apply length, strand and frame filters.
+                filtered_orfs = filter_orfs(
+                    all_orfs,
+                    min_length=int(min_length),
+                    max_length=max_value,
+                    strand=strand_value,
+                    frame=frame_value,
+                )
+
+                # Apply complete/partial filter.
+                filtered_orfs = [
+                    orf
+                    for orf in filtered_orfs
+                    if orf["orf_type"] in orf_types
+                ]
+
+                # Store results so they remain visible after reruns.
+                st.session_state["orf_results"] = {
+                    "records": records,
+                    "all_orfs": all_orfs,
+                    "filtered_orfs": filtered_orfs,
+                    "start_codons": start_codons,
+                    "stop_codons": stop_codons,
+                    "overlap_mode": overlap_mode,
+                    "min_length": int(min_length),
+                    "max_length": max_value,
+                    "strand_label": strand_label,
+                    "frame_label": frame_label,
+                    "orf_types": orf_types,
+                }
+
+    # ========================================================
+    # DISPLAY RESULTS
+    # ========================================================
+
+    if "orf_results" not in st.session_state:
         st.caption(
-            "Enter a DNA sequence or upload a file, then select Find ORFs."
+            "Choose your codons and filters, enter or upload DNA, "
+            "then click Find ORFs."
         )
         return
 
-    records = st.session_state["orf_records"]
-    total_bases = sum(len(sequence) for _, sequence in records)
+    result = st.session_state["orf_results"]
+
+    records = result["records"]
+    all_orfs = result["all_orfs"]
+    filtered_orfs = result["filtered_orfs"]
+
+    total_bases = sum(
+        len(sequence) for _, sequence in records
+    )
 
     st.success(
         f"Loaded {len(records)} sequence(s), "
         f"containing {total_bases:,} bases in total."
     )
 
-    # Sequence statistics
+    # --------------------------------------------------------
+    # SEQUENCE STATISTICS
+    # --------------------------------------------------------
+
     st.subheader("Sequence statistics")
 
     overall_sequence = "".join(
@@ -605,74 +830,11 @@ def main():
             "cross between different records."
         )
 
-    # Codon settings
-    st.subheader("Codon settings")
+    # --------------------------------------------------------
+    # ORF DETECTION SUMMARY
+    # --------------------------------------------------------
 
-    codon_col1, codon_col2 = st.columns(2)
-
-    with codon_col1:
-        start_codons = st.multiselect(
-            "Start codons",
-            options=AVAILABLE_START_CODONS,
-            default=START_CODONS,
-        )
-
-    with codon_col2:
-        stop_codons = st.multiselect(
-            "Stop codons",
-            options=AVAILABLE_STOP_CODONS,
-            default=STOP_CODONS,
-        )
-
-    if not start_codons:
-        st.warning("Select at least one start codon.")
-        return
-
-    if not stop_codons:
-        st.warning("Select at least one stop codon.")
-        return
-
-    # Overlapping ORF reporting
-    st.subheader("Overlapping ORF reporting")
-
-    overlap_mode = st.radio(
-        "How should overlapping ORFs be reported?",
-        options=[
-            "Keep all candidates (including overlaps)",
-            "Keep only the longest ORF for each stop codon",
-        ],
-        index=0,
-        help=(
-            "Keep all candidates reports every start codon that reaches "
-            "a stop. Longest-only keeps the earliest start and therefore "
-            "the longest ORF for each stop codon within each reading frame. "
-            "Different frames or strands can still overlap."
-        ),
-    )
-
-    report_overlaps = (
-        overlap_mode == "Keep all candidates (including overlaps)"
-    )
-
-    # Find ORFs in each record
-    all_orfs = []
-
-    for record_name, sequence in records:
-        record_orfs = find_orfs(
-            sequence,
-            start_codons=start_codons,
-            stop_codons=stop_codons,
-            report_overlaps=report_overlaps,
-        )
-
-        for orf in record_orfs:
-            orf["sequence_name"] = record_name
-
-        all_orfs.extend(record_orfs)
-
-    # Give ORFs unique IDs across all records
-    for number, orf in enumerate(all_orfs, start=1):
-        orf["orf_id"] = f"ORF_{number}"
+    st.subheader("ORF detection summary")
 
     st.write(
         f"**Candidate ORFs detected before filtering:** {len(all_orfs)}"
@@ -687,84 +849,24 @@ def main():
     )
 
     count_col1, count_col2 = st.columns(2)
+
     count_col1.metric("Complete ORFs found", complete_count)
     count_col2.metric("Partial ORFs found", partial_count)
 
-    # Filters
-    st.subheader("Filter ORFs")
-
-    orf_types = st.multiselect(
-        "ORF type",
-        options=["Complete", "Partial"],
-        # FIX: Show partial ORFs by default as well.
-        # This prevents boundary ORFs from being hidden.
-        default=["Complete", "Partial"],
-        help="Choose Complete, Partial, or both.",
+    st.caption(
+        f"Settings used — starts: {', '.join(result['start_codons'])}; "
+        f"stops: {', '.join(result['stop_codons'])}; "
+        f"minimum length: {result['min_length']} bp; "
+        f"maximum length: "
+        f"{'none' if result['max_length'] is None else result['max_length']} bp; "
+        f"strand: {result['strand_label']}; "
+        f"frame: {result['frame_label']}."
     )
 
-    col1, col2, col3 = st.columns(3)
+    # --------------------------------------------------------
+    # SUMMARY STATISTICS
+    # --------------------------------------------------------
 
-    with col1:
-        min_length = st.number_input(
-            "Minimum length (bases)",
-            min_value=0,
-            value=MIN_ORF_LENGTH,
-            step=3,
-        )
-
-    with col2:
-        max_length = st.number_input(
-            "Maximum length (0 = no maximum)",
-            min_value=0,
-            value=0,
-            step=3,
-        )
-
-    with col3:
-        strand_label = st.selectbox(
-            "Strand",
-            ["Both", "Forward (+)", "Reverse (-)"],
-        )
-
-    frame_label = st.selectbox(
-        "Reading frame",
-        ["All", "Frame 1", "Frame 2", "Frame 3"],
-    )
-
-    strand_value = {
-        "Both": "both",
-        "Forward (+)": "+",
-        "Reverse (-)": "-",
-    }[strand_label]
-
-    frame_value = (
-        "all" if frame_label == "All"
-        else int(frame_label[-1])
-    )
-
-    max_value = None if max_length == 0 else int(max_length)
-
-    if max_value is not None and max_value < min_length:
-        st.warning(
-            "Maximum length must be greater than or equal "
-            "to minimum length."
-        )
-        filtered_orfs = []
-    else:
-        filtered_orfs = filter_orfs(
-            all_orfs,
-            min_length=int(min_length),
-            max_length=max_value,
-            strand=strand_value,
-            frame=frame_value,
-        )
-
-        filtered_orfs = [
-            orf for orf in filtered_orfs
-            if orf["orf_type"] in orf_types
-        ]
-
-    # Summary statistics
     stats = calculate_statistics(filtered_orfs)
 
     st.subheader("Summary statistics")
@@ -778,23 +880,27 @@ def main():
 
     metric2.metric(
         "Mean length",
-        f'{stats["mean_length"]:.1f} bp',
+        f"{stats['mean_length']:.1f} bp",
     )
 
     metric3.metric(
         "Shortest length",
-        f'{stats["shortest_length"]} bp',
+        f"{stats['shortest_length']} bp",
     )
 
     metric4.metric(
         "Longest length",
-        f'{stats["longest_length"]} bp',
+        f"{stats['longest_length']} bp",
     )
 
-    # Results table
+    # --------------------------------------------------------
+    # RESULTS TABLE AND CSV DOWNLOAD
+    # --------------------------------------------------------
+
     st.subheader("ORF results")
 
     if filtered_orfs:
+
         show_sequences = st.checkbox(
             "Show DNA and protein sequences in the table",
             value=True,
@@ -802,6 +908,7 @@ def main():
 
         if show_sequences:
             table_orfs = filtered_orfs
+
         else:
             table_orfs = [
                 {
@@ -828,7 +935,10 @@ def main():
             mime="text/csv",
         )
 
-        # Inspect an individual ORF
+        # ----------------------------------------------------
+        # INSPECT AN INDIVIDUAL ORF
+        # ----------------------------------------------------
+
         st.subheader("Inspect an ORF")
 
         selected_id = st.selectbox(
@@ -837,7 +947,8 @@ def main():
         )
 
         selected_orf = next(
-            orf for orf in filtered_orfs
+            orf
+            for orf in filtered_orfs
             if orf["orf_id"] == selected_id
         )
 
@@ -845,7 +956,12 @@ def main():
 
         detail1.metric("Strand", selected_orf["strand"])
         detail2.metric("Frame", selected_orf["frame"])
-        detail3.metric("Length", f'{selected_orf["length"]} bases')
+
+        detail3.metric(
+            "Length",
+            f'{selected_orf["length"]} bases',
+        )
+
         detail4.metric(
             "Coordinates",
             f'{selected_orf["start"]}–{selected_orf["end"]}',
@@ -854,7 +970,10 @@ def main():
         st.write(f'**Type:** {selected_orf["orf_type"]}')
 
         st.write("**DNA sequence (coding strand orientation)**")
-        st.code(selected_orf["dna_sequence"], language="text")
+        st.code(
+            selected_orf["dna_sequence"],
+            language="text",
+        )
 
         st.write("**Protein translation**")
         st.code(
@@ -868,7 +987,10 @@ def main():
             "lowering the minimum length, or changing the strand or frame."
         )
 
-    # Codon and amino-acid counts
+    # --------------------------------------------------------
+    # CODON AND AMINO-ACID COUNTS
+    # --------------------------------------------------------
+
     with st.expander("Codon counts"):
         st.json(stats["codon_counts"])
 
