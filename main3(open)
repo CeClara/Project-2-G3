@@ -1,4 +1,4 @@
-#changedddddddddagin# i may have broken it if not revert back before i made changes 
+# i may have broken it if not revert back before i made changes 
 # ============================================================
 # PROJECT 2: ORF FINDER TOOL
 # Run with: python -m streamlit run orf_finder_reviewed.py
@@ -1110,19 +1110,17 @@ def main():
                         st.code(match["amino_acid_sequence"], language="text")
 
         with length_tab:
-            if st.checkbox("Load ORF length histogram", key="load_length_chart"):
-                st.plotly_chart(make_length_histogram(filtered_orfs), use_container_width=True)
+            st.plotly_chart(make_length_histogram(filtered_orfs), use_container_width=True)
 
         with amino_tab:
-            if st.checkbox("Load amino acid frequency chart", key="load_amino_chart"):
-                st.plotly_chart(
-                    make_amino_acid_chart(stats["amino_acid_counts"]),
-                    use_container_width=True
-                )
-                st.caption(
-                    "Amino acid frequencies count each selected ORF separately; "
-                    "nested or overlapping ORFs may count genomic regions more than once."
-                )
+            st.plotly_chart(
+                make_amino_acid_chart(stats["amino_acid_counts"]),
+                use_container_width=True
+            )
+            st.caption(
+                "Amino acid frequencies count each selected ORF separately; "
+                "nested or overlapping ORFs may count genomic regions more than once."
+            )
     else:
         st.info("No graphs: no ORFs match the current filters.")
 
